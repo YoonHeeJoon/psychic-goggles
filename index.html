@@ -166,6 +166,8 @@ const VICTORY_TIME = 600;   // 이 시간(초)만큼 버티면 승리
 const BOSS_EVERY = 120;     // 보스 등장 주기(초)
 const MAX_ENEMIES = 220;
 const MAX_LEVEL = 5;
+const GEMS_PER_KILL = 10;   // 몬스터 한 마리가 떨어뜨리는 경험치 구슬 수
+const MAX_GEMS = 600;       // 화면에 동시에 존재할 수 있는 구슬 수 (초과분은 경험치로 바로 지급)
 
 const WEAPONS = {
   missile: {
@@ -335,7 +337,7 @@ function moveInput() {
 }
 
 /* ───────────── 효과음 (WebAudio) ───────────── */
-let ac = null, muted = false, lastKillSfx = 0;
+let ac = null, muted = false, lastKillSfx = 0, lastGemSfx = 0;
 function initAudio() {
   if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
   try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; }
@@ -421,15 +423,22 @@ function buildOptions(g) {
     const j = (Math.random() * (i + 1)) | 0;
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  const opts = pool.slice(0, 3);
-  return opts.length ? opts : [{ kind: 'heal' }];
+  return pool.slice(0, 3);
 }
 
+// 선택 화면을 열면 true. 올릴 능력이 하나도 없으면 화면 없이 체력만 회복하고 false.
 function openLevelUp() {
-  const g = G;
+  const g = G, opts = buildOptions(g);
+  if (!opts.length) {
+    const p = g.player;
+    p.hp = Math.min(g.S.maxHp, p.hp + g.S.maxHp * 0.5 * g.pending);
+    g.texts.push({ x: p.x, y: p.y - 24, txt: '+체력', life: 1 });
+    g.pending = 0;
+    return false;
+  }
   state = 'levelup';
   joy.active = false;
-  g.options = buildOptions(g);
+  g.options = opts;
   optionsReadyAt = performance.now() + 350;   // 이동 중 실수로 선택하는 것 방지
   const box = $('cards');
   box.innerHTML = '';
@@ -441,11 +450,9 @@ function openLevelUp() {
       const d = WEAPONS[o.id]; icon = d.icon; name = d.name; desc = d.text[o.to - 1];
       lvText = o.from === 0 ? '새 무기' : 'Lv ' + o.from + ' → ' + o.to;
       if (o.from === 0) tag = '<span class="tag">NEW</span>';
-    } else if (o.kind === 'p') {
+    } else {
       const d = PASSIVES[o.id]; icon = d.icon; name = d.name; desc = d.text;
       lvText = o.from === 0 ? '패시브' : 'Lv ' + o.from + ' → ' + o.to;
-    } else {
-      icon = '🍖'; name = '회복'; desc = '체력을 50% 회복합니다'; lvText = '모든 능력 최대치!';
     }
     b.innerHTML = '<span class="num">' + (i + 1) + '</span>' + tag +
       '<span class="icon">' + icon + '</span>' +
@@ -455,6 +462,7 @@ function openLevelUp() {
   });
   showScreen('levelup');
   sfx(660, 0.1, 'square', 0.04, 330);
+  return true;
 }
 
 function chooseOption(i) {
@@ -462,18 +470,19 @@ function chooseOption(i) {
   const g = G, o = g.options[i];
   if (!o) return;
   if (o.kind === 'w') g.wp[o.id] = o.to;
-  else if (o.kind === 'p') {
+  else {
     g.ps[o.id] = o.to;
     if (o.id === 'vigor') {
       const old = g.S.maxHp;
       g.S = stats(g);
       g.player.hp = Math.min(g.S.maxHp, g.player.hp + (g.S.maxHp - old));
     }
-  } else g.player.hp = Math.min(g.S.maxHp, g.player.hp + g.S.maxHp * 0.5);
+  }
   g.S = stats(g);
   g.pending--;
-  if (g.pending > 0) openLevelUp();
-  else { state = 'play'; showScreen(null); }
+  if (g.pending > 0 && openLevelUp()) return;
+  state = 'play';
+  showScreen(null);
 }
 
 /* ───────────── 적 생성 ───────────── */
@@ -529,13 +538,21 @@ function hurtEnemy(e, base, kx, ky, kb = 130) {
   if (e.hp <= 0) killEnemy(e);
 }
 
+function dropGems(e) {
+  const g = G, spread = e.boss ? 40 : 18;
+  const n = Math.min(GEMS_PER_KILL, Math.max(0, MAX_GEMS - g.gems.length));
+  for (let i = 0; i < n; i++) {
+    g.gems.push({ x: e.x + rand(-spread, spread), y: e.y + rand(-spread, spread), v: e.xp, pull: false });
+  }
+  if (n < GEMS_PER_KILL) addXp(e.xp * (GEMS_PER_KILL - n));   // 상한 때문에 못 떨군 몫은 바로 지급
+}
+
 function killEnemy(e) {
   const g = G;
   e.dead = true;
   g.kills++;
   burst(e.x, e.y, e.color, e.boss ? 28 : 6);
-  if (g.gems.length < 400) g.gems.push({ x: e.x, y: e.y, v: e.xp, pull: false });
-  else addXp(e.xp);
+  dropGems(e);
   if (e.boss) {
     g.player.hp = Math.min(g.S.maxHp, g.player.hp + g.S.maxHp * 0.3);
     g.shake = 12;
@@ -669,7 +686,10 @@ function update(dt) {
     if (d < 16) {
       g.gems.splice(i, 1);
       addXp(gem.v);
-      sfx(880 + Math.min(g.player.level, 20) * 10, 0.04, 'sine', 0.02);
+      if (performance.now() - lastGemSfx > 45) {   // 한꺼번에 줍을 때 소리가 겹치지 않게
+        lastGemSfx = performance.now();
+        sfx(880 + Math.min(g.player.level, 20) * 10, 0.04, 'sine', 0.02);
+      }
     }
   }
 
