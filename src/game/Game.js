@@ -27,6 +27,10 @@ import { Puzzles } from '../world/Puzzles.js';
 import { Domain } from './Domain.js';
 import { Achievements } from './Achievements.js';
 import { Photo } from './Photo.js';
+import { Fishing } from './Fishing.js';
+import { Boat } from './Boat.js';
+import { Festival } from '../world/Festival.js';
+import { Snow } from '../world/Snow.js';
 import { Grass } from '../world/Grass.js';
 import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
@@ -98,6 +102,7 @@ export class Game {
     migrateSave(this.explore.progress, PARTY);
     this.gathering = new Gathering(this);
     Puzzles.reserve(this.terrain);
+    Fishing.reserve(this.terrain);
     this.scene.add(this.terrain.buildMesh(q.terrainStep));
 
     loader.set(0.35, '하늘과 바다를 칠하는 중...');
@@ -130,6 +135,10 @@ export class Game {
     this.boss = new Boss(this);
     this.puzzles = new Puzzles(this);
     this.domain = new Domain(this);
+    this.festival = new Festival(this);
+    this.snow = new Snow(this.scene);
+    this.fishing = new Fishing(this);
+    this.boat = new Boat(this);
     this.buffs = { atk: 0, stamina: 0 };
 
     this.rendererW.setup(this.scene, this.camera);
@@ -168,11 +177,14 @@ export class Game {
     loader.done();
     this.state = 'title';
     document.addEventListener('pointerlockchange', () => {
-      if (!document.pointerLockElement && this.state === 'playing' && !this.input.dragMode) this.pause();
+      if (document.pointerLockElement || this.input.dragMode) return;
+      if (this.state === 'playing' || this.state === 'boat') this.pause();
+      else if (this.state === 'fishing') this.fishing.stop();
     });
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.state === 'fishing') return this.fishing.stop();
       if (e.code === 'Escape' && this.input.dragMode) {
-        if (this.state === 'playing') this.pause();
+        if (this.state === 'playing' || this.state === 'boat') this.pause();
         else if (this.state === 'paused') this.resume();
       }
       const code = this.input.canon(e.code);
@@ -506,6 +518,7 @@ export class Game {
   }
 
   pause() {
+    this.pausedFrom = this.state;
     this.state = 'paused';
     this.menus.showPause();
     this.sfx.open();
@@ -513,7 +526,8 @@ export class Game {
 
   resume() {
     this.menus.hidePause();
-    this.state = 'playing';
+    this.state = this.pausedFrom === 'boat' ? 'boat' : 'playing';
+    this.pausedFrom = null;
     this.input.requestLock();
     this.clock.getDelta();
   }
@@ -721,6 +735,11 @@ export class Game {
     let theme = shared.uNight.value > 0.5 ? 'night' : 'day';
     if (theme === 'day' && this.frame % 30 === 0) this.inHighland = this.terrain.autumnAt(this.player.pos.x, this.player.pos.z) > 0.45;
     if (theme === 'day' && this.inHighland) theme = 'highland';
+    if (this.frame % 30 === 0) {
+      const pl = portLocal(this.player.pos.x, this.player.pos.z);
+      this.nearPort = pl.s > -30 && pl.s < PORT_LEN + 70 && Math.abs(pl.t) < 55;
+    }
+    if (this.festival && this.festival.active && this.nearPort && !(this.domain && this.domain.inside)) theme = 'festival';
     if (B && B.alive && B.aggro && B.state !== 'dormant') theme = 'boss';
     else if (this.battleHold > 0) theme = 'battle';
     this.music.setTheme(theme);
@@ -859,6 +878,11 @@ export class Game {
     } else if (this.state === 'photo') {
       this.combat.lateUpdate(0, dt);
       this.photo.update(dt);
+    } else if (this.state === 'fishing') {
+      this.combat.lateUpdate(0, dt);
+      this.fishing.update(dt);
+    } else if (this.state === 'boat') {
+      this.combat.lateUpdate(0, dt);
     }
     if (this.achievements && this.state !== 'paused') this.achievements.update(dt);
     if (this.bossUI) {
@@ -888,7 +912,10 @@ export class Game {
     if (this.quest) this.quest.update();
     if (this.commissions) this.commissions.update(dt);
     this.structures.update(dt, shared.uWindStrength.value);
-    if (this.touch) this.touch.setVisible(this.state === 'playing');
+    // the boat steers after the moorings bob, so its heel adds on top
+    if (this.state === 'boat') this.boat.update(dt);
+    else this.boat.idle(dt);
+    if (this.touch) this.touch.setVisible(this.state === 'playing' || this.state === 'boat');
     const gu = this.rendererW.grade.uniforms;
     gu.uFlash.value = Math.max(0, gu.uFlash.value - dt * 2.2);
     gu.uSaturation.value = 1.04 - 0.22 * this.weather.overcast;
@@ -900,6 +927,8 @@ export class Game {
     this.water.update(this.camera, this.state === 'paused' ? 0 : dt, this.state === 'playing' ? P : null);
     this.vegetation.update(this.camera);
     this.leaves.update(this.camera, dt);
+    this.snow.update(this.camera, this.state === 'paused' ? 0 : dt);
+    if (this.state !== 'paused' && this.state !== 'loading') this.festival.update(dt);
     if (this.state !== 'paused') this.wildlife.update(dt);
     this.grass.update(this.state === 'playing' ? P.pos : this.camera.position);
     shared.uPlayerPos.value.copy(P.pos);
@@ -909,7 +938,7 @@ export class Game {
     }
     this.updateAudio(dt);
 
-    if (this.state === 'playing' || this.state === 'paused') this.updateHUD(dt);
+    if (this.state === 'playing' || this.state === 'paused' || this.state === 'boat') this.updateHUD(dt);
   }
 
   updateHUD(dt) {

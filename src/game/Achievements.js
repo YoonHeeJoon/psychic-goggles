@@ -30,6 +30,10 @@ const LIST = [
   { id: 'quest2', name: '단풍 항구의 등불', desc: '두 번째 임무 완료하기', goal: 1, stat: 'quest2' },
   { id: 'comm10', name: '믿음직한 일꾼', desc: '일일 의뢰 10개 완료하기', goal: 10, stat: 'commissions' },
   { id: 'weapon5', name: '전설의 무기', desc: '5성 무기 손에 넣기', goal: 1, stat: 'weapon5' },
+  { id: 'fish5', name: '느긋한 낚시꾼', desc: '물고기 5마리 낚기', goal: 5, stat: 'fish' },
+  { id: 'fishAll', name: '물고기 도감', desc: '모든 종류의 물고기 낚기', goal: 4, stat: 'fishKinds' },
+  { id: 'wish', name: '바람에 띄운 소원', desc: '바람등불 축제에서 소원 등불 날리기', goal: 1, stat: 'wishes' },
+  { id: 'sail', name: '바다로 나간 여행자', desc: '돛단배로 누적 1000m 항해하기', goal: 1000, stat: 'sail' },
 ];
 const REWARD = 20;
 
@@ -97,6 +101,8 @@ export class Achievements {
         return prog.bossKills || 0;
       case 'domain':
         return prog.domainClears || 0;
+      case 'fishKinds':
+        return Object.keys(prog.fish || {}).length;
       case 'maxLv':
         return Math.max(...g.player.party.map((c) => c.level || 20));
       default:

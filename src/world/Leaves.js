@@ -29,7 +29,7 @@ void main(){
   float sp = 0.75 + aSeed.w * 0.6;
   // horizontal position wraps inside a box centred on the camera
   vec2 corner = uCam.xz - ${(BOX / 2).toFixed(1)};
-  vec2 p = mod(aSeed.xy * ${BOX.toFixed(1)} + uWind * t * 1.4 - corner, ${BOX.toFixed(1)}) + corner;
+  vec2 p = mod(aSeed.xy * ${BOX.toFixed(1)} + uWind - corner, ${BOX.toFixed(1)}) + corner;
   p += vec2(sin(t * 1.1 + aSeed.z * 31.0), cos(t * 0.9 + aSeed.z * 17.0)) * 0.7;
   float y = uCam.y + ${(H * 0.45).toFixed(1)} - mod(t * sp + aSeed.z * ${H.toFixed(1)}, ${H.toFixed(1)});
   float ground = terrainHeight(p);
@@ -121,7 +121,9 @@ export class Leaves {
     const u = this.uniforms;
     u.uK.value = this.k;
     u.uCam.value.copy(camera.position);
-    u.uWind.value.copy(shared.uWindDir.value).multiplyScalar(0.6 + shared.uWindStrength.value * 0.5);
+    // integrated drift (a changing wind never makes the leaves jump)
+    u.uWind.value.addScaledVector(shared.uWindDir.value, (0.6 + shared.uWindStrength.value * 0.5) * 1.4 * dt);
+    u.uWind.value.set(u.uWind.value.x % BOX, u.uWind.value.y % BOX);
     this.mesh.visible = this.k > 0.02;
   }
 }

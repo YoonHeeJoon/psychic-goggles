@@ -525,6 +525,50 @@ export class Sound {
     }
   }
 
+  // festival
+  fireworkLaunch(d = 100) {
+    if (!this.ready || !this.gate('fwl', 150)) return;
+    const k = Math.max(0.15, 1 - d / 420);
+    this.tone({ type: 'sine', f: 900, f2: 2600, a: 0.05, d: 1.1, gain: 0.025 * k, verb: 0.3 });
+    this.nz({ type: 'highpass', f: 3000, a: 0.02, d: 0.6, gain: 0.03 * k });
+  }
+  fireworkBoom(d = 100, kind = 'peony') {
+    if (!this.ready) return;
+    const k = Math.max(0.12, 1 - d / 600);
+    const lp = 600 + 2400 * k;
+    this.nz({ type: 'lowpass', f: lp, f2: 120, a: 0.004, d: 1.3, gain: 0.32 * k, buf: 'brown', verb: 0.4 });
+    this.tone({ f: 70, f2: 35, a: 0.004, d: 0.7, gain: 0.25 * k });
+    const n = kind === 'willow' ? 10 : 6;
+    for (let i = 0; i < n; i++) this.nz({ type: 'highpass', f: 2500 + Math.random() * 3000, a: 0.002, d: 0.04, gain: 0.05 * k, delay: 0.35 + Math.random() * (kind === 'willow' ? 1.6 : 0.8) });
+  }
+
+  // fishing
+  castLine() {
+    if (!this.ready) return;
+    this.nz({ f: 1800, f2: 600, q: 1, a: 0.01, d: 0.35, gain: 0.08 });
+    this.tone({ type: 'triangle', f: 1300, f2: 500, d: 0.3, gain: 0.03 });
+  }
+  plop() {
+    if (!this.ready) return;
+    this.tone({ type: 'sine', f: 520, f2: 180, d: 0.12, gain: 0.08 });
+    this.nz({ type: 'lowpass', f: 1500, d: 0.15, gain: 0.07, buf: 'pink' });
+  }
+  bite() {
+    if (!this.ready) return;
+    this.tone({ type: 'sine', f: 380, f2: 140, d: 0.1, gain: 0.1 });
+    this.nz({ type: 'lowpass', f: 2200, d: 0.12, gain: 0.1, buf: 'pink' });
+    this.tone({ type: 'triangle', f: 1600, d: 0.15, gain: 0.04, delay: 0.05 });
+  }
+  reel() {
+    if (!this.ready || !this.gate('reel', 70)) return;
+    this.nz({ f: 3200, q: 4, d: 0.03, gain: 0.03 });
+  }
+  catchFish(rare) {
+    if (!this.ready) return;
+    this.nz({ type: 'lowpass', f: 2600, f2: 400, d: 0.4, gain: 0.14, buf: 'pink' });
+    [784, 988, 1175, rare ? 1568 : 1319].forEach((f, i) => this.tone({ type: 'triangle', f, d: 0.25, gain: 0.05, delay: 0.12 + i * 0.08, verb: 0.3 }));
+  }
+
   // highland enemies
   bow() {
     if (!this.ready || !this.gate('bow', 120)) return;

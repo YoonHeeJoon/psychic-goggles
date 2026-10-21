@@ -72,6 +72,7 @@ uniform float uCloudCover;
 uniform float uOvercast;
 uniform float uRainbow;
 uniform float uFlash;
+uniform float uAurora;
 varying vec3 vDir;
 ${NOISE_GLSL}
 
@@ -116,6 +117,27 @@ void main(){
     // milky band
     float band = fbm3(d.xz * 3.0 + d.y) * 0.5 + 0.5;
     col += vec3(0.25, 0.3, 0.55) * pow(band, 3.0) * 0.12 * uNight * smoothstep(0.1, 0.6, h);
+  }
+
+  // ---- aurora: folded curtains of light over the northern sky on clear nights
+  float auroraK = uAurora * uNight * (1.0 - uOvercast) * smoothstep(0.02, 0.16, h) * smoothstep(0.55, -0.45, d.z);
+  if (auroraK > 0.002) {
+    vec2 base = d.xz / max(h, 0.06);
+    vec2 q0 = base * 0.32 + vec2(uTime * 0.003, uTime * 0.005);
+    float warp = snoise(q0 * 0.6 + uTime * 0.008) * 1.5;
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < 9; i++) {
+      float k = float(i) / 9.0;
+      vec2 q = q0 * (1.0 + k * 0.42);
+      float band = abs(sin((q.x + warp) * 2.1 + q.y * 0.35));
+      float curtain = pow(1.0 - band, 7.0) + pow(1.0 - band, 2.5) * 0.12;
+      float rays = 0.55 + 0.45 * snoise(vec2(q.x * 14.0 + warp * 3.0, uTime * 0.25 + k));
+      vec3 c = mix(vec3(0.18, 1.0, 0.62), vec3(0.62, 0.32, 1.0), smoothstep(0.25, 1.0, k));
+      acc += c * curtain * rays * (1.0 - k * 0.8);
+    }
+    // a soft glow under the curtains, then the curtains themselves
+    col += vec3(0.1, 0.45, 0.32) * 0.05 * auroraK * smoothstep(0.5, 0.05, h);
+    col += acc * 0.2 * auroraK;
   }
 
   // ---- clouds: high stylised layer
@@ -202,6 +224,7 @@ export class Environment {
       uOvercast: { value: 0 },
       uRainbow: { value: 0 },
       uFlash: { value: 0 },
+      uAurora: { value: 0 },
     };
     const skyGeo = new THREE.SphereGeometry(1, 48, 24);
     this.sky = new THREE.Mesh(
@@ -300,7 +323,16 @@ export class Environment {
   }
 
   update(dt, focus) {
-    if (!this.paused) this.time = (this.time + dt * this.timeScale) % 24;
+    if (!this.paused) {
+      const t = this.time + dt * this.timeScale;
+      if (t >= 24) this.day = (this.day || 0) + 1;
+      this.time = t % 24;
+    }
+    // some nights glow with aurora, a few only faintly
+    const nightNo = this.time < 12 ? (this.day || 0) - 1 : this.day || 0;
+    const r = Math.abs(Math.sin(nightNo * 12.9898 + 4.1) * 43758.5453) % 1;
+    this.aurora = this.auroraForce ?? (r < 0.65 ? 0.75 + r * 0.35 : 0.18);
+    this.skyUniforms.uAurora.value = this.aurora;
     const t = this.time;
     // sun path: rises east (+x), sets west (-x), tilted south
     const ang = ((t - 6) / 12) * Math.PI; // 0 at 6h, PI at 18h
@@ -335,7 +367,9 @@ export class Environment {
       grey(p.lit, 0.35 * oc, 0.28 * oc);
       grey(p.shade, 0.3 * oc, 0.1 * oc);
     }
-    this.skyUniforms.uCloudCover.value = 0.5 + 0.5 * oc;
+    // aurora nights are crisp and clear
+    const clearSky = this.aurora > 0.5 ? (this.aurora - 0.5) * 0.9 * shared.uNight.value : 0;
+    this.skyUniforms.uCloudCover.value = 0.5 + 0.5 * oc - clearSky * (1 - oc);
     this.skyUniforms.uOvercast.value = oc;
     this.scene.fog.density = this.fogBase * (1 + 1.4 * oc);
     this.updateMist(t, p, oc, dt);

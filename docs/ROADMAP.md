@@ -71,11 +71,6 @@ Chromium screenshots, then commits.
 - [x] Region-specific music theme, map and minimap support for the new area
   (+ far enemies now LOD out their outlines and shadows: −30~40% draw calls in busy views)
 
-## Iteration 11 — seasons & sky
-- [ ] Snowfall on the peaks, aurora nights, shooting stars
-- [ ] Festival night in the harbour town: lanterns released over the sea, fireworks
-- [ ] Fishing at the pier and lake (timing mini-game), boat rides across the harbour
-
 ## Iteration 10 — systems depth ✅
 - [x] Weapons and artifacts (stats, refinement), a simple gacha-free unlock path
   (12 weapons with ascension + refinement, 5-slot artifacts in 3 sets with rolled substats; one stat block
@@ -85,3 +80,19 @@ Chromium screenshots, then commits.
   market + smithy shop panel)
 - [x] Save versioning (v2 migration) and portable saves (export / import JSON)
 - [ ] Deterministic combat events for co-op (deferred)
+
+## Iteration 11 — seasons & sky ✅
+- [x] Snowfall on the peaks, aurora nights, shooting stars
+  (camera-wrapped GPU snow that grows with altitude and fades at the lens; aurora curtains layered in the sky
+  shader on most clear nights, with the clouds thinning out; shooting-star streaks)
+- [x] Festival night in the harbour town: lanterns released over the sea, fireworks
+  (every night from 19:00 — instanced sky lanterns drifting out to sea, peony/ring/willow/double shells with
+  trails and distance-delayed booms, a wish-lantern stall, a festival music theme)
+- [x] Fishing at the pier and lake (timing mini-game), boat rides across the harbour
+  (charge-and-cast, float nibbles and bite, strike window, tension-bar reeling; 4 fish with sizes and records,
+  3 fish dishes; a sailing boat with an unfurling sail, heel, wake, shallow-water collision and docking)
+
+## Iteration 12 — new heroes
+- [ ] Two new playable characters: ice (frozen / superconduct / melt) and earth (shields, crystallize)
+- [ ] Party setup screen: pick four of six, character showcase with idle animation and stats
+- [ ] Freezing water to walk on it, ice-locked puzzles, earth pillars to climb on

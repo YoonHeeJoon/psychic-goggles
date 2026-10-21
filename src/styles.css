@@ -634,3 +634,48 @@ details.keys summary { cursor: pointer; padding: 6px 0; color: var(--gold); }
 .sh-qty button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.06); color: #fff; font-size: 18px; cursor: pointer; }
 .sh-cost { display: flex; justify-content: center; align-items: center; gap: 4px; font-size: 13.5px; font-weight: 700; color: var(--gold); margin-top: 6px; }
 @media (max-width: 720px) { .rep-rws { grid-template-columns: repeat(2, 1fr); } .comm-track { top: 300px; width: 200px; } }
+
+/* ---- fishing */
+.fish-ui { position: absolute; inset: 0; pointer-events: none; z-index: 30; font-family: var(--font); }
+.fish-ui.hidden { display: none; }
+.fu-top { position: absolute; left: 50%; top: 26px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.fu-spot { font-size: 13px; letter-spacing: .3em; color: var(--gold); text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.fu-spot::before, .fu-spot::after { content: '✦'; margin: 0 10px; opacity: .6; font-size: 10px; }
+.fu-hint { font-size: 15px; text-shadow: 0 1px 4px rgba(0,0,0,.75); min-height: 20px; }
+.fu-charge { position: absolute; left: 50%; bottom: 150px; width: 300px; height: 12px; margin-left: -150px; border-radius: 8px; background: rgba(10,14,28,.55); border: 1px solid rgba(255,255,255,.25); overflow: hidden; opacity: 0; transition: opacity .2s; }
+.fu-charge.show { opacity: 1; }
+.fu-charge i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #9fe8ff, #ffe08a 70%, #ffb36a); box-shadow: 0 0 12px rgba(255,224,138,.7); }
+.fu-reel { position: absolute; left: 50%; bottom: 120px; width: min(520px, 86vw); transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; }
+.fu-reel.hidden { display: none; }
+.fu-prog { height: 8px; border-radius: 6px; background: rgba(10,14,28,.55); overflow: hidden; border: 1px solid rgba(255,255,255,.2); }
+.fu-prog i { display: block; height: 100%; width: 30%; background: linear-gradient(90deg, #7ff5dc, #ffe08a); transition: width .08s linear; }
+.fu-track { position: relative; height: 34px; border-radius: 18px; background: linear-gradient(180deg, rgba(20,40,70,.75), rgba(10,20,40,.75)); border: 2px solid rgba(236,217,164,.55); box-shadow: inset 0 2px 10px rgba(0,0,0,.4), 0 4px 18px rgba(0,0,0,.35); }
+.fu-zone { position: absolute; top: 3px; bottom: 3px; border-radius: 14px; background: rgba(255,224,138,.25); border: 2px solid rgba(255,224,138,.6); transition: background .15s, box-shadow .15s; }
+.fu-zone.on { background: rgba(127,245,220,.35); border-color: #7ff5dc; box-shadow: 0 0 16px rgba(127,245,220,.65); }
+.fu-fish { position: absolute; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.fu-fish img { width: 100%; height: 100%; }
+.fu-bite { position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%) scale(.4); font-size: 72px; font-weight: 900; color: #ffe08a; text-shadow: 0 0 20px rgba(255,180,80,.9), 0 3px 0 #a0522d; opacity: 0; transition: opacity .1s, transform .18s cubic-bezier(.3,1.8,.5,1); }
+.fu-bite.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.fu-catch { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; padding: 14px 26px 14px 16px; border-radius: 16px; background: linear-gradient(90deg, rgba(18,22,38,.85), rgba(30,40,70,.85)); border: 1px solid rgba(236,217,164,.55); box-shadow: 0 10px 30px rgba(0,0,0,.4); animation: fuPop .45s cubic-bezier(.3,1.6,.5,1); }
+.fu-catch.hidden { display: none; }
+.fu-catch.rare { border-color: #ffe08a; box-shadow: 0 0 30px rgba(255,224,138,.45), 0 10px 30px rgba(0,0,0,.4); }
+.fu-catch img { width: 64px; height: 64px; }
+.fu-catch div { display: flex; flex-direction: column; gap: 2px; }
+.fu-catch b { font-size: 20px; }
+.fu-catch small { font-size: 13px; opacity: .8; }
+.fu-new { font-size: 11px; letter-spacing: .25em; color: var(--gold); }
+@keyframes fuPop { from { opacity: 0; transform: translateX(-50%) scale(.7); } }
+.fu-keys { position: absolute; right: 28px; bottom: 26px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-size: 13px; text-shadow: 0 1px 3px rgba(0,0,0,.7); opacity: .9; }
+.fu-keys kbd, .boat-hint kbd { display: inline-block; min-width: 20px; padding: 1px 6px; margin: 0 2px; border-radius: 5px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); font: 600 12px var(--font); text-align: center; }
+.fu-btn, .fu-quit { display: none; pointer-events: auto; }
+.fish-ui.touch .fu-btn { display: block; position: absolute; right: 36px; bottom: 90px; width: 110px; height: 110px; border-radius: 50%; border: 2px solid rgba(236,217,164,.7); background: radial-gradient(circle at 40% 35%, rgba(255,255,255,.3), rgba(30,40,70,.7)); color: var(--txt); font: 700 16px var(--font); }
+.fish-ui.touch .fu-quit { display: block; position: absolute; right: 20px; top: 20px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); background: rgba(18,22,38,.6); color: var(--txt); font-size: 18px; }
+.fish-ui.touch .fu-keys { display: none; }
+
+/* ---- sailing */
+.boat-hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; padding: 8px 18px; border-radius: 22px; background: rgba(18,22,38,.5); font-size: 13px; text-shadow: 0 1px 3px rgba(0,0,0,.6); pointer-events: none; z-index: 20; }
+.boat-hint.hidden { display: none; }
+.boat-hint .bh-land { opacity: .35; transition: opacity .2s, color .2s; }
+.boat-hint .bh-land.on { opacity: 1; color: #ffe08a; }
+.boat-hint .bh-speed { min-width: 64px; text-align: right; color: var(--gold); font-variant-numeric: tabular-nums; }
+.hud.boating .skills, .hud.boating .help { opacity: 0; transition: opacity .3s; }

@@ -514,7 +514,7 @@ export class Exploration {
       else consider(wp.pos, 3.0, '지도 열기 · 순간이동', () => this.g.openMap(wp));
     }
     // villagers, pickable plants, cooking pots, quest spots
-    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest, this.g.puzzles, this.g.domain, this.g.commissions]) if (prov) prov.consider(P.pos, consider);
+    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest, this.g.puzzles, this.g.domain, this.g.commissions, this.g.festival, this.g.fishing, this.g.boat]) if (prov) prov.consider(P.pos, consider);
     const st = this.S.statue;
     const d = Math.hypot(P.pos.x - st.center.x, P.pos.z - st.center.z);
     if (d < 9 && d < bd && P.pos.y < st.center.y + 4) best = { label: '바람의 수호상 · 기도하기', act: () => this.pray() };

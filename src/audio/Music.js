@@ -6,6 +6,8 @@
 //   boss   — C minor, heavier drums, low brass drone and staccato strings
 //   highland — D dorian, plucked koto and bamboo flute over a soft frame drum
 //              (the autumn highlands by day)
+//   festival — G major, bright koto and flute over a festival drum and bells
+//              (the harbour lantern festival at night)
 // Exploration themes play a phrase and then rest, like an open-world score.
 
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
@@ -34,6 +36,7 @@ const THEMES = {
   night: { bpm: 62, key: 9, scale: [0, 3, 5, 7, 10], prog: [['Am', 'F', 'C', 'G'], ['Dm', 'Am', 'F', 'E']], seed: 23, play: 8, rest: 8 },
   battle: { bpm: 132, key: 2, scale: [0, 2, 3, 5, 7, 8, 10], prog: [['Dm', 'Bb', 'C', 'A'], ['Gm', 'Dm', 'Bb', 'A']], seed: 37, play: 1e9, rest: 0 },
   highland: { bpm: 84, key: 2, scale: [0, 2, 3, 7, 9], prog: [['Dm', 'C', 'Bb', 'C'], ['Dm', 'Am', 'Bb', 'A'], ['F', 'C', 'Dm', 'Am'], ['Bb', 'C', 'Dm', 'Dm']], seed: 67, play: 16, rest: 8 },
+  festival: { bpm: 104, key: 7, scale: [0, 2, 4, 7, 9], prog: [['G', 'C', 'D', 'G'], ['Em', 'C', 'D', 'D'], ['C', 'D', 'Bm', 'Em'], ['C', 'D', 'G', 'G']], seed: 89, play: 32, rest: 4 },
   boss: { bpm: 140, key: 0, scale: [0, 2, 3, 5, 7, 8, 10], prog: [['Cm', 'Ab', 'Bb', 'G'], ['Cm', 'Ab', 'Fm', 'G']], seed: 51, play: 1e9, rest: 0 },
 };
 
@@ -262,6 +265,29 @@ export class Music {
           }
         } else if (row[e]) this.koto(tr, row[e], t, 0.06);
       }
+      return;
+    }
+    if (name === 'festival') {
+      if (i16 === 0) this.pad(tr, tones.map((p) => 60 + (p % 12)), t, barLen * 1.05, 0.014, 1300);
+      // drum: boom on 1, light double hit on the and-of-3, claps on 2 and 4
+      if (i16 === 0 || i16 === 10 || i16 === 11) this.drum(tr, 'taiko', t, i16 === 0 ? 0.26 : 0.13);
+      if (i16 === 4 || i16 === 12) this.drum(tr, 'snare', t, 0.12);
+      if (i16 % 2 === 1) this.drum(tr, 'hat', t, 0.08);
+      if (i16 % 4 === 0) this.bass(tr, root - 12 + (i16 === 8 ? 7 : 0), t, sixteenth * 3, 0.05);
+      const row = tr.melody[phrase][b4];
+      if (i16 % 2 === 0) {
+        const e = i16 / 2;
+        const seq = [0, 1, 2, 1, 2, 1, 0, 2];
+        this.koto(tr, 60 + (tones[seq[e]] % 12) + 12, t, 0.03);
+        const n = row[e];
+        if (n) {
+          let len = 1;
+          while (e + len < 8 && !row[e + len]) len++;
+          this.flute(tr, n, t, len * sixteenth * 2, 0.05);
+        }
+      }
+      // little bells on the first beat of every other bar
+      if (i16 === 0 && bar % 2 === 0) for (let k = 0; k < 3; k++) this.harp(tr, 84 + (tones[k] % 12), t + k * sixteenth * 0.5, 0.025);
       return;
     }
     if (name === 'day' || name === 'night') {
