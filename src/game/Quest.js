@@ -393,28 +393,27 @@ export class Quest {
         }
       };
     }
+    if (npc.id === 'smith')
+      return async (d) => {
+        await d.say(N, '어서 와! 단풍 항구 대장간에 온 걸 환영해. 고원 광석으로 벼린 무기들이지.', T);
+        const i = await d.choose([
+          { text: '물건 보여 주세요.', icon: 'shop' },
+          { text: '강화 광석은 어디서 나요?', icon: 'talk' },
+          { text: '다음에 올게요.', icon: 'bye' },
+        ]);
+        if (i === 0) this.openShopAfter = 'smith';
+        else if (i === 1) await d.say(N, '보물상자, 정예 몬스터, 비경… 그리고 게시판 의뢰를 끝내면 나눠 주기도 하지. 모자라면 여기서 사도 돼!', T);
+        else await d.say(N, '그래, 무기가 무뎌지면 언제든 들러!', T);
+      };
     if (npc.id === 'merchant')
       return async (d) => {
-        await d.say(N, '어서 오세요~ 먼 바다를 건너온 신선한 재료랍니다. 별빛 결정 10개씩이에요!', T);
-        for (;;) {
-          const i = await d.choose([
-            { text: `노을사과 사기 (보유 결정 ${g.gems})`, icon: 'shop' },
-            { text: '별딸기 사기', icon: 'shop' },
-            { text: '달빛버섯 사기', icon: 'shop' },
-            { text: '그만 볼게요.', icon: 'bye' },
-          ]);
-          if (i === 3) break;
-          const item = ['apple', 'berry', 'mushroom'][i];
-          if (g.gems < 10) {
-            await d.say(N, '어머, 결정이 모자라네요. 몬스터를 물리치거나 보물상자를 열어 보세요!', T);
-            break;
-          }
-          g.gems -= 10;
-          g.bag.add(item, 1);
-          g.sfx.gem();
-          await d.say(N, `${ITEMS[item].name} 하나, 여기 있어요! 또 필요한 건요?`, T);
-        }
-        await d.say(N, '좋은 여행 되세요~', T);
+        await d.say(N, '어서 오세요~ 먼 바다를 건너온 신선한 재료랍니다!', T);
+        const i = await d.choose([
+          { text: '물건 보여 주세요.', icon: 'shop' },
+          { text: '그냥 둘러볼게요.', icon: 'bye' },
+        ]);
+        if (i === 0) this.openShopAfter = 'market';
+        else await d.say(N, '좋은 여행 되세요~', T);
       };
     if (npc.id === 'keeper')
       return async (d) => {
@@ -485,6 +484,7 @@ export class Quest {
 
   reward(ch = 1) {
     const g = this.g;
+    if (g.commissions) g.commissions.addRep(ch === 2 ? 'port' : 'village', 60);
     const gems = ch === 2 ? 160 : 120;
     g.gems += gems;
     g.hud.showBanner(`임무 완료 · ${TITLES[ch]}`);

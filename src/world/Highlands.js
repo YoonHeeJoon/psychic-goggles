@@ -228,6 +228,27 @@ function buildPort(S, rand) {
       S.solids.addCircle(x, z, sz * 0.55, y + sz);
     }
   }
+  // the smithy: a stone forge with glowing coals and an anvil
+  {
+    const [fx, fz] = W(L - 0.6, -13.2);
+    const fy = T.heightAt(fx, fz);
+    const F = S.frame(fx, fy, fz, PORT_DIR + Math.PI / 2);
+    const at = (m) => F.clone().multiply(m);
+    b.add('stone', box(1.6, 1.0, 1.1), { m: at(M(0, 0, 0)), color: '#9a9284', uvScale: 0.6 });
+    b.add('lamp', box(1.2, 0.08, 0.7), { m: at(M(0, 1.0, 0)), color: '#ff8a3a', extra: 1 });
+    b.add('stone', box(0.7, 1.8, 0.7), { m: at(M(0, 1.0, -0.2)), color: '#8a8274', uvScale: 0.6 });
+    b.add('wood', box(1.9, 0.12, 1.4), { m: at(M(0, 2.4, 0, 0.1, 0, 0)), color: '#6b4630' });
+    for (const sx of [-0.9, 0.9]) b.add('wood', box(0.12, 2.45, 0.12), { m: at(M(sx, 0, 0.6)), color: '#5d4130' });
+    S.solids.addBox(fx, fz, 0.8, 0.55, PORT_DIR + Math.PI / 2, fy + 1.0);
+    const [ax, az] = W(L + 1.6, -11.6);
+    const ay = T.heightAt(ax, az);
+    b.add('wood', cyl(0.28, 0.32, 0.5, 10), { m: M(ax, ay, az), color: '#5d4130' });
+    b.add('metal', box(0.75, 0.22, 0.32), { m: M(ax, ay + 0.5, az, 0, PORT_DIR, 0), color: '#3b3a40' });
+    b.add('metal', new THREE.ConeGeometry(0.16, 0.36, 8), { m: M(ax + Math.sin(PORT_DIR) * 0.5, ay + 0.61, az + Math.cos(PORT_DIR) * 0.5, 0, 0, Math.PI / 2), color: '#3b3a40' });
+    S.solids.addCircle(ax, az, 0.35, ay + 0.72);
+    S.smithy = { x: fx, y: fy, z: fz };
+  }
+
   // fishing nets drying between poles
   for (const [s, t] of [
     [L - 2, 13],
@@ -283,6 +304,8 @@ function buildPort(S, rand) {
     b.add('roof', new THREE.ConeGeometry(1.5, 1.6, 12), { m: at(M(0, 15.15, 0)), color: '#2e6f8e', uv: 'local', uvScale: 0.6 });
     b.add('metal', new THREE.SphereGeometry(0.18, 8, 6), { m: at(M(0, 16.05, 0)), color: '#c9a050' });
     S.solids.addCircle(x, z, 3.4, 3.6);
+    // the tower itself can be climbed; its gallery is a place to stand
+    S.solids.addCircle(x, z, 1.95, 12.8);
     S.lighthouse = new V3(x, 13.6, z);
     S.lighthouseBase = new V3(x, 3.6, z);
     S.beacon = makeBeacon(S, S.lighthouse);

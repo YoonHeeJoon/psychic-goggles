@@ -149,6 +149,23 @@ export const NPC_DEFS = [
     wait: [99, 99],
     lines: ['젊었을 땐 저 등대 불빛만 보고 바다를 건넜지.', '흠, 바람에서 소금 냄새가 나는군.', '단풍이 지면 겨울 배가 온다네.'],
   },
+  {
+    id: 'smith',
+    name: '해랑',
+    title: '항구 대장장이',
+    cfg: {
+      female: false,
+      scale: 1.1,
+      colors: col({ skin: '#d9a07a', hair: '#3a2a22', hairTip: '#7a4a32', eye: '#c25a3a', eye2: '#ffd8b0', outfit: '#5a3a2a', outfit2: '#c25a3a', legs: '#2a2420' }),
+      hair: { style: 'short', length: 1.0, bangs: 6, ahoge: false, spiky: true, tail: null },
+      outfit: { skirt: 'coat', cape: false, sleeves: 'long', coat: false },
+    },
+    route: [portWorld(PL + 1.6, -10.1)],
+    face: PORT_DIR + Math.PI / 2,
+    speed: 0,
+    wait: [99, 99],
+    lines: ['쇠는 뜨거울 때 두드려야지!', '고원 광석은 단단해서 좋아.', '무기 손질은 여행의 기본이야.'],
+  },
 ];
 
 export class NPCs {

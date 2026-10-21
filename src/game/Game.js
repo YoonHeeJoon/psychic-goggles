@@ -19,6 +19,10 @@ import { ITEMS } from './Items.js';
 import { Boss } from '../combat/Boss.js';
 import { BossUI } from '../ui/BossUI.js';
 import { Progression, CharPanel } from './Progression.js';
+import { Gear } from './Gear.js';
+import { Commissions } from './Commissions.js';
+import { ShopPanel } from '../ui/Shop.js';
+import { migrateSave } from './Save.js';
 import { Puzzles } from '../world/Puzzles.js';
 import { Domain } from './Domain.js';
 import { Achievements } from './Achievements.js';
@@ -28,7 +32,7 @@ import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
 import { CameraController } from './CameraController.js';
 import { HUD, Menus } from '../ui/HUD.js';
-import { ELEMENTS } from '../character/characters.js';
+import { ELEMENTS, PARTY } from '../character/characters.js';
 import { Combat } from '../combat/Combat.js';
 import { Structures } from '../world/Structures.js';
 import { Exploration } from './Exploration.js';
@@ -91,6 +95,7 @@ export class Game {
     this.structures.build();
     this.ground = this.structures.ground;
     this.explore = new Exploration(this);
+    migrateSave(this.explore.progress, PARTY);
     this.gathering = new Gathering(this);
     Puzzles.reserve(this.terrain);
     this.scene.add(this.terrain.buildMesh(q.terrainStep));
@@ -114,6 +119,7 @@ export class Game {
     this.cameraCtl.yaw = 0;
     this.combat = new Combat(this);
     this.explore.build();
+    this.gear = new Gear(this);
     this.progression = new Progression(this);
     this.weather = new Weather(this);
     this.wildlife = new Wildlife(this);
@@ -138,6 +144,8 @@ export class Game {
     this.buffBar = new BuffBar(this.hud.layer);
     this.dialogue = new Dialogue(this, this.container);
     this.quest = new Quest(this);
+    this.commissions = new Commissions(this);
+    this.shop = new ShopPanel(this, this.container);
     this.bossUI = new BossUI(this.container);
     this.charPanel = new CharPanel(this, this.container);
     this.achievements = new Achievements(this);
@@ -186,6 +194,10 @@ export class Game {
       if (code === 'KeyC') {
         if (this.state === 'playing') this.openPanel(this.charPanel);
         else if (this.state === 'panel' && this.panel === this.charPanel) this.closePanel();
+      }
+      if (code === 'KeyJ') {
+        if (this.state === 'playing') this.openPanel(this.commissions);
+        else if (this.state === 'panel' && this.panel === this.commissions) this.closePanel();
       }
       if (e.code === 'Escape' && this.state === 'map') this.closeMap();
       if (e.code === 'Escape' && this.state === 'panel') this.closePanel();
@@ -429,7 +441,7 @@ export class Game {
 
   // ---- dialogue
   talkTo(npc) {
-    return this.runScript(npc, this.quest.script(npc));
+    return this.runScript(npc, this.commissions.wrapTalk(npc, this.quest.script(npc)));
   }
 
   runScript(npc, fn) {
@@ -457,6 +469,12 @@ export class Game {
         this.clock.getDelta();
       }
       this.explore.save();
+      // a shopkeeper's "show me your wares" opens the shop panel
+      const shop = this.quest.openShopAfter;
+      if (shop && this.state === 'playing') {
+        this.quest.openShopAfter = null;
+        this.openPanel(this.shop, shop);
+      }
     });
   }
 
@@ -868,6 +886,7 @@ export class Game {
       this.domain.update(dt);
     }
     if (this.quest) this.quest.update();
+    if (this.commissions) this.commissions.update(dt);
     this.structures.update(dt, shared.uWindStrength.value);
     if (this.touch) this.touch.setVisible(this.state === 'playing');
     const gu = this.rendererW.grade.uniforms;
@@ -923,6 +942,7 @@ export class Game {
       if (B.alive && Math.abs(B.home.x - P.pos.x) < 110 && Math.abs(B.home.z - P.pos.z) < 110) markers.push({ x: B.home.x, z: B.home.z, color: '#c48bff', r: 6, pulse: B.aggro });
       this.npcs.minimapMarkers(P, markers);
       this.quest.minimapMarker(markers);
+      this.commissions.minimapMarkers(markers);
       this.hud.drawMinimap(P, this.cameraCtl.yaw, markers);
     }
     this.fpsAcc += dt;

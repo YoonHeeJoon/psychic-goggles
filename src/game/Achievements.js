@@ -1,4 +1,5 @@
 import { elementIcon } from '../ui/icons.js';
+import { WEAPONS } from './Gear.js';
 
 // Achievements ("모험 기록"): progress is derived from saved progress plus a
 // few counters, checked once a second. Each unlock pops a banner and gives
@@ -27,6 +28,8 @@ const LIST = [
   { id: 'guard', name: '방패 깨기', desc: '방패 고블린의 방어를 무너뜨리기', goal: 1, stat: 'guardBreaks' },
   { id: 'elite', name: '우두머리 사냥', desc: '정예 몬스터 처치하기', goal: 1, stat: 'elites' },
   { id: 'quest2', name: '단풍 항구의 등불', desc: '두 번째 임무 완료하기', goal: 1, stat: 'quest2' },
+  { id: 'comm10', name: '믿음직한 일꾼', desc: '일일 의뢰 10개 완료하기', goal: 10, stat: 'commissions' },
+  { id: 'weapon5', name: '전설의 무기', desc: '5성 무기 손에 넣기', goal: 1, stat: 'weapon5' },
 ];
 const REWARD = 20;
 
@@ -86,6 +89,8 @@ export class Achievements {
         return g.quest.chapterDone(1) ? 1 : 0;
       case 'quest2':
         return g.quest.chapterDone(2) ? 1 : 0;
+      case 'weapon5':
+        return g.gear && g.gear.d.weapons.some((w) => WEAPONS[w.id].rarity === 5) ? 1 : 0;
       case 'puzzles':
         return Object.keys(prog.puzzles || {}).length;
       case 'boss':

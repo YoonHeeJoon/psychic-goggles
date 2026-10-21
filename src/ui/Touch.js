@@ -183,7 +183,7 @@ export class TouchControls {
     });
     for (const p of hud.topRight.querySelectorAll('.keyhint')) {
       const act = p.dataset.act;
-      this.tap(p, () => (act === 'map' ? g.openMap() : act === 'bag' ? g.openPanel(g.bag) : act === 'char' ? g.openPanel(g.charPanel) : g.pause()));
+      this.tap(p, () => (act === 'map' ? g.openMap() : act === 'bag' ? g.openPanel(g.bag) : act === 'char' ? g.openPanel(g.charPanel) : act === 'comm' ? g.openPanel(g.commissions) : g.pause()));
     }
   }
 

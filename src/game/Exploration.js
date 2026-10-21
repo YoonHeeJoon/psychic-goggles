@@ -4,13 +4,13 @@ import { LANDMARKS, SPAWN, CAMPS, BRIDGE, PORT_LEN, portWorld } from '../world/T
 import { toonMaterial } from '../render/materials.js';
 import { NOISE_GLSL, shared } from '../render/shaders.js';
 import { smoothstep } from '../core/noise.js';
+import { SAVE_KEY } from './Save.js';
 
 const V3 = THREE.Vector3;
 const TAU = Math.PI * 2;
 const _v = new V3();
 const _c = new THREE.Color();
 
-const SAVE_KEY = 'starwind.progress.v1';
 
 // Starwind Eyes on peaks and hard-to-reach spots. `y` (absolute) is filled in
 // at build time; `lift` is the height above the ground.
@@ -514,7 +514,7 @@ export class Exploration {
       else consider(wp.pos, 3.0, '지도 열기 · 순간이동', () => this.g.openMap(wp));
     }
     // villagers, pickable plants, cooking pots, quest spots
-    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest, this.g.puzzles, this.g.domain]) if (prov) prov.consider(P.pos, consider);
+    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest, this.g.puzzles, this.g.domain, this.g.commissions]) if (prov) prov.consider(P.pos, consider);
     const st = this.S.statue;
     const d = Math.hypot(P.pos.x - st.center.x, P.pos.z - st.center.z);
     if (d < 9 && d < bd && P.pos.y < st.center.y + 4) best = { label: '바람의 수호상 · 기도하기', act: () => this.pray() };
@@ -585,6 +585,10 @@ export class Exploration {
     this.vfx.ring(c.pos, T.glow, 2.4 + c.tier, 0.6);
     this.beam(c.pos.clone().add(new V3(0, 0.5, 0)), T.glow, 5 + c.tier * 3, 0.38 + c.tier * 0.1, 1.4);
     setTimeout(() => this.g.combat.spawnGems(top, T.drops), 220);
+    // gear: domain and boss chests carry their own, richer loot
+    const src = c.id.startsWith('domain:') ? 'domain' : c.id.startsWith('boss:') ? 'boss' : 'chest';
+    setTimeout(() => this.g.gear && this.g.gear.drop(src, c.tier), 700);
+    if (this.g.rep && !c.temp) this.g.rep.onChest(c);
     this.g.hud.toast(`<b>${T.name}</b> 획득`, T.glow);
     this.g.sfx.chest(c.tier);
     this.g.cameraCtl.shake(0.05, 0.15);
@@ -713,6 +717,7 @@ export class Exploration {
 
   save() {
     this.saveTimer = 0;
+    if (this.g.loadedFromFile) return; // an imported save is about to load
     this.progress.gems = this.g.gems;
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(this.progress));

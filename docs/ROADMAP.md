@@ -76,7 +76,12 @@ Chromium screenshots, then commits.
 - [ ] Festival night in the harbour town: lanterns released over the sea, fireworks
 - [ ] Fishing at the pier and lake (timing mini-game), boat rides across the harbour
 
-## Iteration 10 — systems depth
-- [ ] Weapons and artifacts (stats, refinement), a simple gacha-free unlock path
-- [ ] Daily commissions, reputation, a shop UI
-- [ ] Co-op ready refactor: deterministic combat events, save versioning
+## Iteration 10 — systems depth ✅
+- [x] Weapons and artifacts (stats, refinement), a simple gacha-free unlock path
+  (12 weapons with ascension + refinement, 5-slot artifacts in 3 sets with rolled substats; one stat block
+  feeds crit, energy recharge and damage bonuses into combat; loot from chests, elites, domain, boss)
+- [x] Daily commissions, reputation, a shop UI
+  (date-seeded hunt/gather/deliver/scout jobs, notice boards, HUD tracker; two reputation tracks with rewards;
+  market + smithy shop panel)
+- [x] Save versioning (v2 migration) and portable saves (export / import JSON)
+- [ ] Deterministic combat events for co-op (deferred)

@@ -5,6 +5,8 @@ import { PRESETS } from '../core/Renderer.js';
 import { WEATHER_MODES } from '../world/Weather.js';
 import { ACTIONS, keyLabel } from '../core/Input.js';
 import { HALF, WORLD_SIZE, RES, SEA_LEVEL } from '../world/Terrain.js';
+import { saveFile } from '../core/Files.js';
+import { exportSave, importSave } from '../game/Save.js';
 
 const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -68,6 +70,7 @@ export class HUD {
        <div class="pill keyhint" data-act="map"><b>M</b> 지도</div>
        <div class="pill keyhint" data-act="bag"><b>B</b> 가방</div>
        <div class="pill keyhint" data-act="char"><b>C</b> 캐릭터</div>
+       <div class="pill keyhint" data-act="comm"><b>J</b> 의뢰</div>
        <div class="pill keyhint" data-act="menu"><b>Esc</b> 메뉴</div>`
     );
     L.appendChild(this.topRight);
@@ -310,7 +313,7 @@ export class HUD {
     for (const m of markers) {
       let x = W / 2 + (m.x - player.pos.x) * zoom;
       let y = W / 2 + (m.z - player.pos.z) * zoom;
-      if (m.shape === 'quest') {
+      if (m.shape === 'quest' || m.shape === 'comm') {
         // quest target sticks to the rim when it is out of range
         const dx = x - W / 2,
           dy = y - W / 2;
@@ -325,7 +328,7 @@ export class HUD {
         g.beginPath();
         g.arc(x, y, s + 3, 0, Math.PI * 2);
         g.fill();
-        g.fillStyle = '#ffd56a';
+        g.fillStyle = m.shape === 'comm' ? '#c9a8ff' : '#ffd56a';
         g.beginPath();
         g.moveTo(x, y - s);
         g.lineTo(x + s * 0.7, y);
@@ -465,6 +468,7 @@ export class Menus {
         <label class="row"><input type="checkbox" class="autores" id="opt-autores"> 자동 해상도 (프레임 유지)</label>
         <label class="row"><input type="checkbox" class="showfps" id="opt-showfps"> FPS 표시</label>
         <div class="pm-row"><button class="pm-btn pm-log">모험 기록</button><button class="pm-btn pm-photo">사진 모드</button></div>
+        <div class="pm-row"><button class="pm-btn pm-export">저장 내보내기</button><button class="pm-btn pm-import">저장 불러오기</button><input type="file" class="pm-file" accept=".json,application/json" hidden></div>
         <details class="keys"><summary>조작 키 설정</summary><div class="key-list"></div><button class="pm-btn key-reset">기본값으로</button></details>
         <button class="resume">계속하기</button>
       </div>`
@@ -520,6 +524,34 @@ export class Menus {
     P.querySelector('.pm-photo').addEventListener('click', () => {
       g.resume();
       g.photo.open();
+    });
+    // portable saves: export as JSON, import (validated) and restart
+    P.querySelector('.pm-export').addEventListener('click', async () => {
+      g.explore.save();
+      const d = new Date();
+      const name = `starwind-save-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
+      const r = await saveFile(name, exportSave(g.explore.progress));
+      if (r === 'saved') g.hud.toast('저장 파일을 내보냈습니다', '#9fe8ff');
+      else if (r === 'unavailable') g.hud.toast('이 화면에서는 파일을 저장할 수 없습니다', '#ffd36a');
+    });
+    const file = P.querySelector('.pm-file');
+    P.querySelector('.pm-import').addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+      const f = file.files && file.files[0];
+      file.value = '';
+      if (!f) return;
+      const err = importSave(await f.text());
+      if (err) {
+        g.hud.toast(err, '#ff8a7a');
+        return;
+      }
+      g.loadedFromFile = true;
+      g.hud.toast('저장을 불러왔습니다 · 다시 시작합니다', '#9fe8ff');
+      setTimeout(() => {
+        const u = new URL(location.href);
+        u.searchParams.delete('fresh');
+        location.replace(u.toString());
+      }, 900);
     });
     P.querySelector('.key-reset').addEventListener('click', () => {
       g.input.resetBinds();

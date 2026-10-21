@@ -20,6 +20,7 @@ export const ACTIONS = [
   ['bag', '가방', 'KeyB'],
   ['char', '캐릭터', 'KeyC'],
   ['log', '업적', 'KeyL'],
+  ['comm', '의뢰 게시판', 'KeyJ'],
   ['photo', '사진 모드', 'KeyP'],
 ];
 

@@ -186,6 +186,7 @@ export class Combat {
     const P = this.player;
     this.blockT = Math.max(0, this.blockT - dt);
     for (const c of P.party) {
+      c.burstBuffT = Math.max(0, (c.burstBuffT || 0) - dt);
       c.skillCd = Math.max(0, c.skillCd - dt);
       c.burstCd = Math.max(0, c.burstCd - dt);
     }
@@ -321,6 +322,7 @@ export class Combat {
     const kit = KITS[c.cfg.id];
     c.energy = 0;
     c.burstCd = kit.burst.cd;
+    c.burstBuffT = 10;
     this.iframe = Math.max(this.iframe, 1.2);
     this.autoAim(12);
     this.g.cameraCtl.shake(0.15, 0.25);
@@ -545,11 +547,19 @@ export class Combat {
     }
     // character attack, talent level for skills/bursts, and the level gap
     const cur = this.player.current;
-    if (this.action && this.action.kind === 'skill') mult *= cur.skillMul || 1;
-    else if (this.action && this.action.kind === 'burst') mult *= cur.burstMul || 1;
+    const G = cur.gear || {};
+    const kind = this.action ? this.action.kind : null;
+    if (kind === 'skill') mult *= cur.skillMul || 1;
+    else if (kind === 'burst') mult *= cur.burstMul || 1;
+    // weapon / artifact damage bonuses
+    let bonus = 1 + (el !== 'phys' ? G.elemDmg || 0 : 0);
+    if (kind === 'attack' || kind === 'plunge') bonus += G.normalDmg || 0;
+    else if (kind === 'skill') bonus += G.skillDmg || 0;
+    else if (kind === 'burst') bonus += G.burstDmg || 0;
+    if (rmult > 1) rmult = 1 + (rmult - 1) * (1 + (G.reactDmg || 0));
     const lvF = clamp(1 + ((cur.level || 20) - (e.level || 20)) * 0.02, 0.6, 1.5);
-    const crit = !h.noCrit && Math.random() < this.stats.critRate;
-    let dmg = this.atk() * mult * rmult * lvF * (crit ? 1 + this.stats.critDmg : 1) * (0.93 + Math.random() * 0.14);
+    const crit = !h.noCrit && Math.random() < (cur.critRate ?? this.stats.critRate);
+    let dmg = this.atk() * mult * rmult * bonus * lvF * (crit ? 1 + (cur.critDmg ?? this.stats.critDmg) : 1) * (0.93 + Math.random() * 0.14);
     if (el === 'phys' && e.superT > 0) dmg *= 1.4;
     dmg = Math.max(1, Math.round(dmg));
     let knock = null;
@@ -569,13 +579,16 @@ export class Combat {
   }
 
   atk() {
-    return (this.player.current.atk || this.stats.atk) * (this.atkBuff || 1);
+    const c = this.player.current;
+    const burst = c.burstBuffT > 0 && c.gear ? 1 + (c.gear.burstAtk || 0) : 1;
+    return (c.atk || this.stats.atk) * (this.atkBuff || 1) * burst;
   }
 
   rawDamage(e, mult, el, color) {
     if (!e.alive) return;
     const center = e.center(new THREE.Vector3());
-    const dmg = Math.round(this.atk() * mult * (0.95 + Math.random() * 0.1));
+    const G = this.player.current.gear || {};
+    const dmg = Math.round(this.atk() * mult * (1 + (G.reactDmg || 0)) * (0.95 + Math.random() * 0.1));
     e.hit(dmg, null, 0);
     this.ui.text(center.clone().setY(center.y + e.height * 0.45 + Math.random() * 0.3), String(dmg), color || ELEMENT_COLORS[el], {});
   }
@@ -756,7 +769,7 @@ export class Combat {
           for (const c of P.party) {
             const same = c.cfg.element === o.el;
             const gain = c === P.current ? (same ? 3 : 2) : same ? 1.8 : 1.2;
-            c.energy = Math.min(c.maxEnergy, c.energy + gain);
+            c.energy = Math.min(c.maxEnergy, c.energy + gain * (c.er || 1));
           }
           this.vfx.sparkle(o.pos, ELEMENTS[o.el].color, 8, 0.5);
           this.g.sfx.energy();
@@ -780,6 +793,9 @@ export class Combat {
       this.g.achievements.add('kills');
       if (e.elite) this.g.achievements.add('elites');
     }
+    if (e.elite && this.g.gear) setTimeout(() => this.g.gear.drop('elite'), 500);
+    if (this.g.commissions) this.g.commissions.onKill(e);
+    if (this.g.quest && e.group) this.g.quest.checkCamp();
     this.spawnEnergy(c, this.player.current.cfg.element, e.elite ? 3 : 1);
     this.spawnGems(c, (2 + Math.floor(Math.random() * 3)) * (e.elite ? 3 : 1));
     if (e.aim) e.aim.visible = false;

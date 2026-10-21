@@ -279,6 +279,7 @@ export class Gathering {
     g.sfx.pick();
     g.hud.toast(`획득 · <b>${ITEMS[s.type].name}</b> ×${n}`, '#9cff7a');
     if (g.quest) g.quest.onEvent('gather', s.type);
+    if (g.commissions) g.commissions.onGather(s.type);
     if (g.achievements) g.achievements.add('gathered');
   }
 
