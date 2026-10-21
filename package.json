@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:single": "vite build --mode single",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:artifact": "vite build --mode artifact && node scripts/make-artifact.mjs"
   },
   "repository": {
     "type": "git",

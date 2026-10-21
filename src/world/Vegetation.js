@@ -318,6 +318,16 @@ void main(){
 }
 `;
 
+export const LEAF_MATERIALS = [];
+export function setLeafCoverage(on) {
+  for (const m of LEAF_MATERIALS) {
+    if (m.alphaToCoverage !== on) {
+      m.alphaToCoverage = on;
+      m.needsUpdate = true;
+    }
+  }
+}
+
 function foliageMaterial({ leaf = false, leafTex = null, wrap = 0.5, trans = 0, sway = 1, flutter = 0, rock = false, a2c = false }) {
   const mat = makeLitShader({
     vertexShader: FOLIAGE_VERT,
@@ -334,6 +344,7 @@ function foliageMaterial({ leaf = false, leafTex = null, wrap = 0.5, trans = 0, 
     defines: leaf ? { LEAF: '' } : {},
   });
   if (leaf && a2c) mat.alphaToCoverage = true;
+  if (leaf) LEAF_MATERIALS.push(mat);
   return mat;
 }
 

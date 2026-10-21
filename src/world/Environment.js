@@ -227,6 +227,22 @@ export class Environment {
     this.update(0, new THREE.Vector3());
   }
 
+  applyQuality(q) {
+    const sh = this.light.shadow;
+    sh.mapSize.set(q.shadowSize, q.shadowSize);
+    if (sh.map) {
+      sh.map.dispose();
+      sh.map = null;
+    }
+    const cam = sh.camera;
+    cam.left = -q.shadowExtent;
+    cam.right = q.shadowExtent;
+    cam.top = q.shadowExtent;
+    cam.bottom = -q.shadowExtent;
+    cam.updateProjectionMatrix();
+    this.shadowExtent = q.shadowExtent;
+  }
+
   get hours() {
     return this.time;
   }

@@ -89,15 +89,27 @@ export class Renderer {
     this.composer.setSize(window.innerWidth, window.innerHeight);
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
-    if (this.q.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.42, 0.55, 0.92);
-      this.composer.addPass(this.bloom);
-    }
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.42, 0.55, 0.92);
+    this.bloom.enabled = this.q.bloom;
+    this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
 
     window.addEventListener('resize', () => this.resize(camera));
+  }
+
+  applyQuality(q, camera) {
+    this.q = q;
+    const r = this.renderer;
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+    this.composer.setPixelRatio(r.getPixelRatio());
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      rt.samples = q.msaa;
+      rt.dispose();
+    }
+    this.bloom.enabled = q.bloom;
+    this.resize(camera);
   }
 
   resize(camera) {

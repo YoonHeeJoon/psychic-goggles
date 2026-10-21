@@ -12,9 +12,12 @@ npm install
 npm run dev          # http://localhost:5173
 npm run build        # dist/
 npm run build:single # dist-single/index.html (파일 하나로 실행 가능)
+npm run build:artifact # dist-artifact/starwind.html (three.js는 jsDelivr에서 로드)
 ```
 
-품질은 시작 화면이나 `?q=low|medium|high|ultra` 로 고를 수 있습니다.
+플레이 링크(비공개 아티팩트): https://claude.ai/artifact/6eySxz6tjyPu4qDnhcLvPE
+
+품질은 시작 화면·설정 메뉴에서 바로 바꿀 수 있고(새로고침 없음), 개발 중에는 `?q=low|medium|high|ultra` 도 쓸 수 있습니다.
 
 ## 조작
 

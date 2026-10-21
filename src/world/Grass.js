@@ -109,8 +109,10 @@ void main(){
 `;
 
 export class Grass {
-  constructor(scene, count, field) {
+  constructor(scene, count, field, maxCount = 320000) {
     this.field = field;
+    this.maxCount = Math.max(count, maxCount);
+    const total = this.maxCount;
     const blade = new THREE.BufferGeometry();
     const pos = [];
     const levels = [0, 0.3, 0.6, 0.85];
@@ -128,9 +130,9 @@ export class Grass {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setIndex(idx);
     const rand = mulberry32(99);
-    const offs = new Float32Array(count * 2);
-    const rnd = new Float32Array(count * 4);
-    for (let i = 0; i < count; i++) {
+    const offs = new Float32Array(total * 2);
+    const rnd = new Float32Array(total * 4);
+    for (let i = 0; i < total; i++) {
       offs[i * 2] = rand() * field;
       offs[i * 2 + 1] = rand() * field;
       rnd[i * 4] = rand();
@@ -138,9 +140,11 @@ export class Grass {
       rnd[i * 4 + 2] = rand();
       rnd[i * 4 + 3] = rand();
     }
-    geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offs, 2));
+    this.offsetAttr = new THREE.InstancedBufferAttribute(offs, 2);
+    geo.setAttribute('aOffset', this.offsetAttr);
     geo.setAttribute('aRand', new THREE.InstancedBufferAttribute(rnd, 4));
     geo.instanceCount = count;
+    this.geo = geo;
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
 
     this.uniforms = {
@@ -159,6 +163,18 @@ export class Grass {
     this.mesh.receiveShadow = true;
     this.mesh.castShadow = false;
     scene.add(this.mesh);
+  }
+
+  setQuality(count, field) {
+    if (field !== this.field) {
+      const rand = mulberry32(99);
+      const a = this.offsetAttr.array;
+      for (let i = 0; i < a.length; i++) a[i] = rand() * field;
+      this.offsetAttr.needsUpdate = true;
+      this.field = field;
+      this.uniforms.uField.value = field;
+    }
+    this.geo.instanceCount = Math.min(count, this.maxCount);
   }
 
   update(center) {

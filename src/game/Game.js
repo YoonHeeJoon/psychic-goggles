@@ -6,7 +6,7 @@ import { Terrain, SPAWN, LANDMARKS } from '../world/Terrain.js';
 import { Environment } from '../world/Environment.js';
 import { Water } from '../world/Water.js';
 import { Grass } from '../world/Grass.js';
-import { Vegetation } from '../world/Vegetation.js';
+import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
 import { CameraController } from './CameraController.js';
 import { HUD, Menus } from '../ui/HUD.js';
@@ -140,6 +140,20 @@ export class Game {
     this.renderer.setClearColor(0x000000, prevClear);
     shared.uSunDir.value.copy(prevSun);
     rt.dispose();
+  }
+
+  setQuality(key) {
+    if (!PRESETS[key] || key === this.qualityKey) return;
+    const q = PRESETS[key];
+    this.qualityKey = key;
+    this.quality = q;
+    try {
+      localStorage.setItem('starwind.quality', key);
+    } catch (e) {}
+    this.rendererW.applyQuality(q, this.camera);
+    this.env.applyQuality(q);
+    this.grass.setQuality(q.grass, q.grassField);
+    setLeafCoverage(q.msaa > 0);
   }
 
   start() {

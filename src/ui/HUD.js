@@ -362,14 +362,14 @@ export class Menus {
       'pause hidden',
       `<div class="pause-panel">
         <h2>설정</h2>
-        <label>그래픽 품질 <select class="sel-q">${Object.entries(PRESETS)
+        <label>그래픽 품질 <select class="sel-q" id="sel-q">${Object.entries(PRESETS)
           .map(([k, v]) => `<option value="${k}">${v.label}</option>`)
-          .join('')}</select><small>변경 시 다시 불러옵니다</small></label>
-        <label>마우스 감도 <input type="range" class="sens" min="0.3" max="2.5" step="0.05" value="1"></label>
-        <label>시간 <input type="range" class="tod" min="0" max="24" step="0.05" value="9"></label>
-        <label>시간 흐름 <select class="tspeed"><option value="0">멈춤</option><option value="1" selected>보통 (하루 24분)</option><option value="6">빠름</option><option value="30">매우 빠름</option></select></label>
-        <label class="row"><input type="checkbox" class="inv"> 상하 반전</label>
-        <label class="row"><input type="checkbox" class="showfps"> FPS 표시</label>
+          .join('')}</select><small>풀 밀도·그림자·해상도가 바로 바뀝니다</small></label>
+        <label>마우스 감도 <input type="range" class="sens" id="opt-sens" min="0.3" max="2.5" step="0.05" value="1"></label>
+        <label>시간 <input type="range" class="tod" id="opt-tod" min="0" max="24" step="0.05" value="9"></label>
+        <label>시간 흐름 <select class="tspeed" id="opt-tspeed"><option value="0">멈춤</option><option value="1" selected>보통 (하루 24분)</option><option value="6">빠름</option><option value="30">매우 빠름</option></select></label>
+        <label class="row"><input type="checkbox" class="inv" id="opt-inv"> 상하 반전</label>
+        <label class="row"><input type="checkbox" class="showfps" id="opt-showfps"> FPS 표시</label>
         <button class="resume">계속하기</button>
       </div>`
     );
@@ -380,29 +380,23 @@ export class Menus {
   bind() {
     const g = this.game;
     const cur = g.qualityKey;
-    this.title.querySelectorAll('.q-btn').forEach((b) => {
-      b.classList.toggle('on', b.dataset.q === cur);
+    const qBtns = this.title.querySelectorAll('.q-btn');
+    const mark = () => qBtns.forEach((b) => b.classList.toggle('on', b.dataset.q === g.qualityKey));
+    mark();
+    qBtns.forEach((b) => {
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (b.dataset.q === cur) return;
-        try {
-          localStorage.setItem('starwind.quality', b.dataset.q);
-        } catch (err) {}
-        const u = new URL(location.href);
-        u.searchParams.set('q', b.dataset.q);
-        location.href = u.toString();
+        g.setQuality(b.dataset.q);
+        mark();
+        this.pause.querySelector('.sel-q').value = g.qualityKey;
       });
     });
     this.title.querySelector('.start-btn').addEventListener('click', () => g.start());
     const P = this.pause;
     P.querySelector('.sel-q').value = cur;
     P.querySelector('.sel-q').addEventListener('change', (e) => {
-      try {
-        localStorage.setItem('starwind.quality', e.target.value);
-      } catch (err) {}
-      const u = new URL(location.href);
-      u.searchParams.set('q', e.target.value);
-      location.href = u.toString();
+      g.setQuality(e.target.value);
+      mark();
     });
     P.querySelector('.sens').addEventListener('input', (e) => (g.cameraCtl.sensitivity = +e.target.value));
     P.querySelector('.tod').addEventListener('input', (e) => (g.env.time = +e.target.value));
