@@ -5,11 +5,14 @@ import { REACTIONS, ELEMENT_COLORS } from './elements.js';
 import { ELEMENTS } from '../character/characters.js';
 import { WorldUI } from '../ui/WorldUI.js';
 import { clamp, lerp, smoothstep } from '../core/noise.js';
+import { Shields } from './Shields.js';
+import { NEW_KITS } from './kits2.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const TAU = Math.PI * 2;
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // ---------------------------------------------------------------------------
 // Pose library. A = wind-up, B = end of strike. Values are Euler XYZ radians.
@@ -61,6 +64,11 @@ const POSES = {
     A: { uArmR: [-0.4, 0, -0.4], fArmR: [-1.2, 0, 0], uArmL: [0.2, 0, 0.4] },
     B: { chest: [-0.12, 0, 0], neck: [0.25, 0, 0], uArmR: [-3.0, 0, -0.2], fArmR: [-0.05, 0, 0], handR: [0.4, 0, 0], uArmL: [0.1, 0, 0.6], fArmL: [-0.3, 0, 0] },
   },
+  // bow: left arm out, right hand drawn back to the cheek, then released
+  bowShot: {
+    A: { spine: [0.02, 0, 0], neck: [0, 0.1, 0], uArmL: [-1.55, 0, 0.1], fArmL: [-0.05, 0, 0], uArmR: [-1.5, 0, -0.2], fArmR: [-2.25, 0, 0], handR: [0.1, 0, 0] },
+    B: { spine: [0.02, 0, 0], neck: [0, 0.1, 0], uArmL: [-1.55, 0, 0.1], fArmL: [-0.05, 0, 0], uArmR: [-1.2, 0, -0.65], fArmR: [-1.1, 0, 0], handR: [0.3, 0, 0] },
+  },
   dash: {
     A: { spine: [0.45, 0, 0], chest: [0.1, 0, 0], uArmR: [0.6, 0, -0.5], fArmR: [-0.3, 0, 0], handR: [1.4, 0, 0], uArmL: [0.5, 0, 0.5] },
     B: { spine: [0.15, 0.25, 0], chest: [0.1, 0.6, 0], uArmR: [-0.1, 1.75, -1.3], fArmR: [-0.1, 0, 0], handR: [1.35, 0, 0], uArmL: [0.45, 0, 0.4] },
@@ -89,6 +97,13 @@ const COMBOS = {
     { pose: 'slashA', dur: 0.48, w: 0.12, s: 0.26, hits: [0.22], mult: 1.0, range: 3.3, arc: 2.6, step: 2.0 },
     { pose: 'thrust', dur: 0.46, w: 0.1, s: 0.3, hits: [0.16, 0.26], mult: 0.65, range: 3.8, arc: 1.0, step: 2.0 },
     { pose: 'spin', dur: 0.7, w: 0.12, s: 0.46, hits: [0.3, 0.44], mult: 0.9, range: 3.6, arc: TAU, step: 1.0, knock: 5 },
+  ],
+  bow: [
+    { pose: 'bowShot', dur: 0.44, w: 0.13, s: 0.2, proj: [0.17], mult: 0.78, step: 0 },
+    { pose: 'bowShot', dur: 0.44, w: 0.13, s: 0.2, proj: [0.17], mult: 0.82, step: 0 },
+    { pose: 'bowShot', dur: 0.52, w: 0.13, s: 0.27, proj: [0.17, 0.25], mult: 0.58, step: 0 },
+    // a frostflake arrow that blooms on impact
+    { pose: 'bowShot', dur: 0.8, w: 0.36, s: 0.46, proj: [0.42], mult: 1.7, step: -1.2, frost: true },
   ],
   catalyst: [
     { pose: 'castR', dur: 0.5, w: 0.12, s: 0.22, proj: [0.2], mult: 0.95, step: 0 },
@@ -177,6 +192,18 @@ export class Combat {
       if (Math.hypot(P.pos.x - e.pos.x, P.pos.z - e.pos.z) < r * 4) this.g.cameraCtl.shake(0.22, 0.25);
     });
     this.blockT = 0;
+    this.shields = new Shields(this);
+    this.pillar = null;
+    this.arrowGeo = (() => {
+      const shaft = new THREE.CylinderGeometry(0.012, 0.012, 0.75, 4);
+      const head = new THREE.ConeGeometry(0.035, 0.14, 4);
+      head.translate(0, 0.44, 0);
+      const fl = new THREE.BoxGeometry(0.06, 0.12, 0.004);
+      fl.translate(0, -0.32, 0);
+      const g = mergeArrow([shaft, head, fl]);
+      g.rotateX(Math.PI / 2);
+      return g;
+    })();
   }
 
   // ======================================================================
@@ -211,6 +238,7 @@ export class Combat {
   lateUpdate(dt, dtReal) {
     this.enemies.update(dt, this.player);
     this.vfx.update(dtReal);
+    this.shields.update(dtReal);
     for (const t of this.trails.values()) t.update(dtReal);
     this.ui.update(dtReal, this.enemies.list, this.player);
     if (this.gemTimer > 0) {
@@ -266,6 +294,7 @@ export class Combat {
     this.action = Object.assign({ t: 0, done: new Set(), events: [], hits: [], proj: [], step: 0 }, def);
     P.locked = true;
     P.animOverride = (pose, model) => this.poseOverride(pose, model);
+    P.bowAim = this.action.pose === 'bowShot';
     this.weaponT = 3;
   }
 
@@ -276,6 +305,7 @@ export class Combat {
     this.action = null;
     P.locked = false;
     P.animOverride = null;
+    P.bowAim = false;
     const tr = this.trails.get(P.model);
     if (tr) tr.stop();
   }
@@ -290,8 +320,8 @@ export class Combat {
     this.combo++;
     this.comboTimer = 1.0;
     this.queued = false;
-    this.autoAim();
-    this.begin({ kind: 'attack', ...def, el: w === 'catalyst' ? P.current.cfg.element : 'phys', stance: w !== 'catalyst' });
+    this.autoAim(w === 'bow' ? 24 : 7);
+    this.begin({ kind: 'attack', ...def, el: w === 'catalyst' ? P.current.cfg.element : def.frost ? 'ice' : 'phys', stance: w !== 'catalyst' && w !== 'bow' });
   }
 
   startPlunge() {
@@ -361,7 +391,7 @@ export class Combat {
     a.t += dt;
     // root motion
     if (a.step && a.t >= a.w && a.t <= a.s + 0.04) P.forced = { x: Math.sin(P.yaw) * a.step, z: Math.cos(P.yaw) * a.step, t: 0.05 };
-    if (a.kind === 'attack' && prev < a.w && a.t >= a.w) this.g.sfx.swing(P.current.cfg.weapon, this.combo - 1);
+    if (a.kind === 'attack' && prev < a.w && a.t >= a.w && P.current.cfg.weapon !== 'bow') this.g.sfx.swing(P.current.cfg.weapon, this.combo - 1);
     for (const h of a.hits) {
       if (prev < h && a.t >= h) this.meleeHit(a);
     }
@@ -417,7 +447,7 @@ export class Combat {
 
   trailFor(model) {
     const w = model.cfg.weapon;
-    if (w === 'catalyst') return null;
+    if (w === 'catalyst' || w === 'bow') return null;
     let t = this.trails.get(model);
     if (!t) {
       t = new Trail(this.scene, ELEMENTS[model.cfg.element].glow);
@@ -432,6 +462,11 @@ export class Combat {
   // tell puzzles (braziers, pinwheels) where an element landed
   emitElement(x, z, r, el) {
     if (this.g.puzzles && el && el !== 'phys') this.g.puzzles.onElement(x, z, r, el);
+    if (this.g.frost && el && el !== 'phys') this.g.frost.onElement(x, z, r, el);
+  }
+  // heavy blows crack rocks
+  emitHeavy(x, z, r) {
+    if (this.g.frost) this.g.frost.onHeavy(x, z, r);
   }
 
   meleeHit(a) {
@@ -440,6 +475,7 @@ export class Combat {
       fz = Math.cos(P.yaw);
     const range = a.range ?? 2.8;
     this.emitElement(P.pos.x + fx * range * 0.5, P.pos.z + fz * range * 0.5, range * 0.6, a.el);
+    if (a.heavy) this.emitHeavy(P.pos.x + fx * range * 0.5, P.pos.z + fz * range * 0.5, range * 0.6);
     let any = false;
     for (const e of this.enemies.near(P.pos.x + fx * 0.5, P.pos.z + fz * 0.5, range)) {
       const dx = e.pos.x - P.pos.x,
@@ -458,6 +494,7 @@ export class Combat {
 
   castProjectile(a) {
     const P = this.player;
+    if (P.current.cfg.weapon === 'bow') return this.shootArrow(a);
     const m = P.model;
     const el = P.current.cfg.element;
     const color = ELEMENTS[el].color;
@@ -474,10 +511,78 @@ export class Combat {
     this.projectiles.push({ pos: start, vel: dir.multiplyScalar(13), el, mult: a.mult, target, life: 1.6, mesh, color });
   }
 
+  // a fast arrow from the bow; the frost arrow blooms into ice on impact
+  shootArrow(a) {
+    const P = this.player;
+    const fx = Math.sin(P.yaw),
+      fz = Math.cos(P.yaw);
+    const start = new THREE.Vector3(P.pos.x + fx * 0.55, P.pos.y + P.height * 0.82, P.pos.z + fz * 0.55);
+    const target = this.enemies.nearest(P.pos.x, P.pos.z, 26, fx, fz, 6);
+    const dir = new THREE.Vector3(fx, 0.02, fz);
+    if (target) target.center(_a).sub(start).normalize(), dir.copy(_a);
+    if (a.proj.length > 1) dir.applyAxisAngle(Y_AXIS, (Math.random() - 0.5) * 0.08);
+    const frost = !!a.frost;
+    const col = frost ? '#bff0ff' : '#fff4dc';
+    const mesh = new THREE.Mesh(this.arrowGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(col).multiplyScalar(frost ? 2.2 : 1.4) }));
+    mesh.position.copy(start);
+    this.scene.add(mesh);
+    this.g.sfx.bow();
+    if (frost) this.vfx.flash(start, '#bff0ff', 0.9, 0.18);
+    this.projectiles.push({ arrow: true, frost, pos: start, vel: dir.multiplyScalar(frost ? 34 : 44), el: a.el, mult: a.mult, target, life: 0.9, mesh, color: col, kind: 'attack' });
+  }
+
+  updateArrow(p, dt) {
+    if (p.target && p.target.alive) {
+      p.target.center(_a).sub(p.pos);
+      const sp = p.vel.length();
+      p.vel.lerp(_a.normalize().multiplyScalar(sp), 1 - Math.exp(-dt * 5));
+    }
+    p.vel.y -= 2 * dt;
+    // sub-steps so a fast arrow never skips past a target
+    const steps = Math.max(1, Math.ceil((p.vel.length() * dt) / 0.45));
+    const sdt = dt / steps;
+    let hit = null;
+    for (let k = 0; k < steps && !hit; k++) {
+      p.pos.addScaledVector(p.vel, sdt);
+      for (const e of this.enemies.near(p.pos.x, p.pos.z, 0.7)) {
+        if (Math.abs(e.pos.y + e.height * 0.5 - p.pos.y) < e.height * 0.7 + 0.4) {
+          hit = e;
+          break;
+        }
+      }
+      if (p.pos.y < this.g.ground.heightAt(p.pos.x, p.pos.z)) break;
+    }
+    p.mesh.position.copy(p.pos);
+    p.mesh.lookAt(_b.copy(p.pos).add(p.vel));
+    this.vfx.particles.spawn(p.pos, _b.set(0, 0, 0), this.vfx.color.set(p.color), p.frost ? 0.14 : 0.07, p.frost ? 0.35 : 0.18, { drag: 4 });
+    const gh = this.g.ground.heightAt(p.pos.x, p.pos.z);
+    const wet = p.pos.y < 0.05 && this.g.terrain.heightAt(p.pos.x, p.pos.z) < 0;
+    if (!hit && p.life > 0 && p.pos.y > gh && !wet) return true;
+    if (hit) this.damage(hit, { mult: p.mult, el: p.el, knock: p.frost ? 2.5 : 0.8, dir: [p.vel.x / 40, p.vel.z / 40], kind: 'attack', stop: 0.02 });
+    if (p.frost) {
+      this.vfx.explosion(_a.copy(p.pos), '#bff0ff', 2.4, 0.4);
+      this.vfx.burst(p.pos, '#ffffff', 24, { speed: 5, size: 0.18, life: 0.5, up: 0.5 });
+      for (const e of this.enemies.near(p.pos.x, p.pos.z, 2.6)) if (e !== hit) this.damage(e, { mult: p.mult * 0.55, el: 'ice', knock: 1.5, quiet: true, kind: 'attack' });
+      this.emitElement(p.pos.x, p.pos.z, 2.4, 'ice');
+      if (wet && this.g.frost) this.g.frost.freezeArea(p.pos.x, p.pos.z, 3, 7);
+    } else {
+      this.emitElement(p.pos.x, p.pos.z, 0.6, p.el);
+      this.vfx.burst(p.pos, p.color, 5, { speed: 3, size: 0.1, life: 0.25 });
+      if (wet) this.g.water.puff(p.pos.x, p.pos.z, 0.3);
+    }
+    this.scene.remove(p.mesh);
+    p.mesh.material.dispose();
+    return false;
+  }
+
   updateProjectiles(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.life -= dt;
+      if (p.arrow) {
+        if (!this.updateArrow(p, dt)) this.projectiles.splice(i, 1);
+        continue;
+      }
       if (p.target && p.target.alive) {
         p.target.center(_a).sub(p.pos).normalize().multiplyScalar(16);
         p.vel.lerp(_a, 1 - Math.exp(-dt * 7));
@@ -533,6 +638,7 @@ export class Combat {
         e.chargeTick = 0.25;
       } else if (reaction.type === 'superconduct') this.superconduct(e, center);
       else if (reaction.type === 'swirl') this.swirl(e, center, reaction.el);
+      else if (reaction.type === 'crystallize') this.shields.crystallize(e, center, reaction.el);
     }
     let mult = h.mult;
     const gmul = e.guardCheck ? e.guardCheck(h, reaction) : 1;
@@ -548,7 +654,7 @@ export class Combat {
     // character attack, talent level for skills/bursts, and the level gap
     const cur = this.player.current;
     const G = cur.gear || {};
-    const kind = this.action ? this.action.kind : null;
+    const kind = h.kind || (this.action ? this.action.kind : null);
     if (kind === 'skill') mult *= cur.skillMul || 1;
     else if (kind === 'burst') mult *= cur.burstMul || 1;
     // weapon / artifact damage bonuses
@@ -641,6 +747,7 @@ export class Combat {
   aoe(x, z, r, h) {
     const out = [];
     this.emitElement(x, z, r, h.el);
+    if (h.heavy) this.emitHeavy(x, z, r);
     for (const e of this.enemies.near(x, z, r)) {
       const dx = e.pos.x - x,
         dz = e.pos.z - z;
@@ -683,6 +790,15 @@ export class Combat {
     }
     const c = P.current;
     dmg = Math.round(dmg * (0.9 + Math.random() * 0.2) * (c.defMul || 1));
+    if (this.shields.cur) {
+      dmg = Math.round(this.shields.absorb(dmg));
+      if (dmg <= 0) {
+        this.iframe = 0.35;
+        P.model.setFlash(0.25);
+        setTimeout(() => P.model.setFlash(0), 70);
+        return;
+      }
+    }
     c.hp = Math.max(0, c.hp - dmg);
     this.g.sfx.hurt();
     this.ui.text(_a.set(P.pos.x, P.pos.y + 1.8, P.pos.z), String(dmg), '#ff6060', {});
@@ -1258,3 +1374,19 @@ const KITS = {
     },
   },
 };
+Object.assign(KITS, NEW_KITS);
+
+// arrows are three small parts merged into one geometry
+function mergeArrow(parts) {
+  const out = new THREE.BufferGeometry();
+  const pos = [];
+  const nrm = [];
+  for (const g of parts) {
+    const n = g.toNonIndexed();
+    pos.push(...n.attributes.position.array);
+    nrm.push(...n.attributes.normal.array);
+  }
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  return out;
+}

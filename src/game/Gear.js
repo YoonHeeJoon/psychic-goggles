@@ -4,7 +4,7 @@
 // the boss, commissions, reputation and the harbour smithy — never by chance
 // purchases.
 
-export const WEAPON_TYPES = { sword: '한손검', claymore: '양손검', polearm: '장병기', catalyst: '법구' };
+export const WEAPON_TYPES = { sword: '한손검', claymore: '양손검', polearm: '장병기', catalyst: '법구', bow: '활' };
 
 // passive effects scale with refinement (R1..R5: +25% per rank)
 export const WEAPONS = {
@@ -19,9 +19,12 @@ export const WEAPONS = {
   starfallSpear: { name: '별똥별 창', type: 'polearm', rarity: 5, atk: 530, sub: ['critRate', 0.14], fx: { critDmg: 0.2, burstDmg: 0.16 }, desc: '치명타 피해 +{critDmg}, 원소 폭발 피해 +{burstDmg}' },
   oldTome: { name: '낡은 마도서', type: 'catalyst', rarity: 3, atk: 240, sub: ['elemDmg', 0.1], fx: { elemDmg: 0.12 }, desc: '원소 피해 +{elemDmg}' },
   harborChart: { name: '항구의 해도', type: 'catalyst', rarity: 4, atk: 375, sub: ['atkPct', 0.18], fx: { skillDmg: 0.16 }, desc: '원소 스킬 피해 +{skillDmg}' },
+  hunterBow: { name: '사냥꾼의 활', type: 'bow', rarity: 3, atk: 245, sub: ['critRate', 0.06], fx: { normalDmg: 0.12 }, desc: '일반 공격 피해 +{normalDmg}' },
+  frostString: { name: '서리 현의 활', type: 'bow', rarity: 4, atk: 385, sub: ['atkPct', 0.18], fx: { skillDmg: 0.16 }, desc: '원소 스킬 피해 +{skillDmg}' },
+  auroraBow: { name: '오로라 장궁', type: 'bow', rarity: 5, atk: 525, sub: ['critDmg', 0.28], fx: { elemDmg: 0.16, burstDmg: 0.18 }, desc: '원소 피해 +{elemDmg}, 원소 폭발 피해 +{burstDmg}' },
   windstarOrb: { name: '바람별 구슬', type: 'catalyst', rarity: 5, atk: 520, sub: ['critDmg', 0.28], fx: { elemDmg: 0.2, reactDmg: 0.2 }, desc: '원소 피해 +{elemDmg}, 원소 반응 피해 +{reactDmg}' },
 };
-export const STARTER = { sword: 'travelSword', claymore: 'smithClaymore', polearm: 'traineeSpear', catalyst: 'oldTome' };
+export const STARTER = { sword: 'travelSword', claymore: 'smithClaymore', polearm: 'traineeSpear', catalyst: 'oldTome', bow: 'hunterBow' };
 export const WEAPON_MAX_ASC = 5;
 export const REFINE_MAX = 5;
 export const ascCost = (a, rarity) => ({ ore: 2 + a * 2 + (rarity - 3) * 2, gems: 40 + a * 40 });
@@ -217,7 +220,7 @@ export class Gear {
     const cur = this.weaponOf(c);
     if (w.owner && w.owner !== c.cfg.id) {
       // swap with the other wearer
-      const other = this.g.player.party.find((p) => p.cfg.id === w.owner);
+      const other = this.g.player.byId(w.owner);
       if (cur) cur.owner = w.owner;
       w.owner = c.cfg.id;
       if (other) this.refresh(other);
@@ -231,7 +234,7 @@ export class Gear {
   equipArt(c, a) {
     const cur = this.artsOf(c)[a.slot];
     if (a.owner && a.owner !== c.cfg.id) {
-      const other = this.g.player.party.find((p) => p.cfg.id === a.owner);
+      const other = this.g.player.byId(a.owner);
       if (cur) cur.owner = a.owner;
       a.owner = c.cfg.id;
       if (other) this.refresh(other);
@@ -407,6 +410,28 @@ export function gearIcon(kind, sub, rarity, tint = '#e8e0cc') {
       g.fill();
       g.fillStyle = '#e3b25a';
       g.fillRect(-7, -16, 14, 4);
+    } else if (sub === 'bow') {
+      g.rotate(Math.PI / 4);
+      g.strokeStyle = '#7a5236';
+      g.lineWidth = 6;
+      g.beginPath();
+      g.moveTo(-8, -38);
+      g.quadraticCurveTo(26, 0, -8, 38);
+      g.stroke();
+      g.strokeStyle = tint;
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.moveTo(-8, -38);
+      g.quadraticCurveTo(8, 0, -8, 38);
+      g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.85)';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(-8, -38);
+      g.lineTo(-8, 38);
+      g.stroke();
+      g.fillStyle = '#e3b25a';
+      g.fillRect(6, -6, 7, 12);
     } else {
       g.rotate(Math.PI / 4);
       g.fillStyle = '#7a4a8a';

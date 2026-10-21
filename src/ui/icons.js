@@ -12,6 +12,12 @@ export function elementIcon(kind, color = 'currentColor', size = 24) {
       return `<svg ${s} fill="${color}"><path d="M13.5 2 4.5 13.6h6.3L9.6 22l9.6-12.4h-6.6z"/></svg>`;
     case 'ice':
       return `<svg ${s} fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M20.7 7 3.3 17"/><path d="m9.5 3.8 2.5 2 2.5-2M9.5 20.2l2.5-2 2.5 2"/></svg>`;
+    case 'earth':
+      return `<svg ${s} fill="${color}"><path d="M12 2.5 20.5 8v8L12 21.5 3.5 16V8z" opacity=".95"/><path d="M12 2.5V12l8.5-4M12 12l-8.5-4M12 12v9.5" stroke="#fff" stroke-width="1.3" fill="none" opacity=".55"/></svg>`;
+    case 'bow':
+      return `<svg ${s} fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"><path d="M5 3c8 2 14 8 16 16"/><path d="M5 3 21 19" stroke-width="1" opacity=".8"/><path d="M4 20 15 9M15 9h-3.5M15 9v3.5"/></svg>`;
+    case 'shield':
+      return `<svg ${s} fill="${color}"><path d="M12 2.5 20 5.5v6.2c0 4.8-3.4 8.4-8 9.8-4.6-1.4-8-5-8-9.8V5.5z"/><path d="M12 6v12" stroke="#fff" stroke-width="1.4" opacity=".5"/></svg>`;
     case 'sword':
       return `<svg ${s} fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"><path d="M14.5 3.5 20.5 3.5 20.5 9.5 9 21"/><path d="m4 15 5 5M6.5 17.5 3 21"/></svg>`;
     case 'star':

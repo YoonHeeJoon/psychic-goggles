@@ -6,7 +6,7 @@ const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12); // midi -> Hz
 
-const EL_ROOT = { wind: 79, fire: 72, water: 76, thunder: 74, ice: 84, phys: 72 };
+const EL_ROOT = { wind: 79, fire: 72, water: 76, thunder: 74, ice: 84, earth: 67, phys: 72 };
 
 export class Sound {
   constructor() {
@@ -540,6 +540,13 @@ export class Sound {
     this.tone({ f: 70, f2: 35, a: 0.004, d: 0.7, gain: 0.25 * k });
     const n = kind === 'willow' ? 10 : 6;
     for (let i = 0; i < n; i++) this.nz({ type: 'highpass', f: 2500 + Math.random() * 3000, a: 0.002, d: 0.04, gain: 0.05 * k, delay: 0.35 + Math.random() * (kind === 'willow' ? 1.6 : 0.8) });
+  }
+
+  // a shield forming: a bright shimmer over a low hum
+  shield() {
+    if (!this.ready || !this.gate('shield', 150)) return;
+    this.tone({ type: 'sine', f: 196, f2: 220, d: 0.5, gain: 0.06 });
+    [784, 988, 1319].forEach((f, i) => this.tone({ type: 'triangle', f, d: 0.35, gain: 0.025, delay: i * 0.04, verb: 0.4 }));
   }
 
   // fishing

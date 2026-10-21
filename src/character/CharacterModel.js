@@ -913,6 +913,22 @@ export class CharacterModel {
       const tassel = new THREE.OctahedronGeometry(0.03);
       this.add(w, tassel, el.color, { pos: V3(0, 1.22, 0), emissive: 0.9 });
       this.weaponLength = 1.6;
+    } else if (cfg.weapon === 'bow') {
+      // recurve bow: limbs bend forward at the grip and back at the tips
+      const pts = [V3(0, -0.6, 0.05), V3(0, -0.46, -0.01), V3(0, -0.22, 0.09), V3(0, 0, 0.13), V3(0, 0.22, 0.09), V3(0, 0.46, -0.01), V3(0, 0.6, 0.05)];
+      const limb = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 28, 0.016, 6, false);
+      this.add(w, limb, c.outfit2, { spec: 0.6, rim: 0.5 });
+      const inlay = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.slice(1, 6).map((p) => p.clone().setZ(p.z + 0.012))), 20, 0.007, 4, false);
+      this.add(w, inlay, c.gold, { spec: 1, outline: false });
+      const grip = new THREE.CylinderGeometry(0.022, 0.022, 0.13, 8);
+      this.add(w, grip, c.dark, { pos: V3(0, 0, 0.13) });
+      const string = new THREE.CylinderGeometry(0.0035, 0.0035, 1.2, 4);
+      this.add(w, string, '#f4f6ff', { pos: V3(0, 0, 0.05), outline: false, cast: false });
+      for (const sy of [-1, 1]) {
+        const gem = new THREE.OctahedronGeometry(0.028);
+        this.add(w, gem, el.color, { pos: V3(0, sy * 0.6, 0.05), emissive: 0.9, outline: false });
+      }
+      this.weaponLength = 0;
     } else {
       // catalyst: floating crystal orb
       const orb = new THREE.IcosahedronGeometry(0.07, 1);
@@ -929,6 +945,11 @@ export class CharacterModel {
       this.j.handR.remove(w);
       this.root.add(w);
       w.position.set(0.35, 1.2, 0.15);
+    } else if (cfg.weapon === 'bow') {
+      // follows the left hand each frame (see update), upright and facing forward
+      this.j.handR.remove(w);
+      this.root.add(w);
+      this._bowP = new THREE.Vector3();
     } else {
       w.position.set(0, -0.055, 0.01);
       w.rotation.set(Math.PI / 2, 0, 0);
@@ -1175,6 +1196,14 @@ export class CharacterModel {
     const gs = smoothstep(0, 1, this.gliderOpen);
     this.glider.scale.set(gs, 0.4 + 0.6 * gs, gs);
 
+    // the bow sits in the left hand, upright, with a slight cant
+    if (this.cfg.weapon === 'bow' && this.weapon.visible) {
+      this.root.updateMatrixWorld(true);
+      this.j.handL.getWorldPosition(this._bowP);
+      this.root.worldToLocal(this._bowP);
+      this.weapon.position.copy(this._bowP);
+      this.weapon.rotation.set(0, st.bowAim ? 0 : -0.5, st.bowAim ? -0.12 : 0.35);
+    }
     // catalyst orb bob
     if (this.cfg.weapon === 'catalyst' && this.weapon.visible) {
       this.weapon.position.y = 1.25 + Math.sin(t * 2.5) * 0.05;

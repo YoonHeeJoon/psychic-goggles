@@ -92,7 +92,18 @@ Chromium screenshots, then commits.
   (charge-and-cast, float nibbles and bite, strike window, tension-bar reeling; 4 fish with sizes and records,
   3 fish dishes; a sailing boat with an unfurling sail, heel, wake, shallow-water collision and docking)
 
-## Iteration 12 — new heroes
-- [ ] Two new playable characters: ice (frozen / superconduct / melt) and earth (shields, crystallize)
-- [ ] Party setup screen: pick four of six, character showcase with idle animation and stats
-- [ ] Freezing water to walk on it, ice-locked puzzles, earth pillars to climb on
+## Iteration 12 — new heroes ✅
+- [x] Two new playable characters: ice (frozen / superconduct / melt) and earth (shields, crystallize)
+  (설하, a bow user: auto-aimed arrows with a frost-bloom finisher, frost-lotus trap, icicle blizzard with a storm wall;
+  카룬, a claymore guardian: a stone pillar you can stand on, rock-spike quake; crystallize shards and a shield system
+  that soaks damage before HP, with a bubble and an HP-bar overlay)
+- [x] Party setup screen: pick four of six, character showcase with idle animation and stats
+  (companions are met out in the world and join after a talk; save v3 keeps who you met and the chosen four)
+- [x] Freezing water to walk on it, ice-locked puzzles, earth pillars to climb on
+  (an ice character in front freezes hex floes underfoot that really carry you, then melt; ice skills freeze water;
+  a chest frozen in ice (melt with fire) and a cracked boulder (earth or heavy blows))
+
+## Iteration 13 — the frozen summit
+- [ ] Chapter 3: climb the frozen summit with the new companions (ice paths and pillars as part of the route)
+- [ ] Biting cold on the peak: a cold meter, warmth from braziers and fire, blizzard weather above the treeline
+- [ ] A second world boss on the summit with its own arena and phases

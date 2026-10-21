@@ -582,7 +582,7 @@ export class Enemy {
   // apply an element and report which reaction (if any) happened
   applyElement(el) {
     if (!el || el === 'phys') return null;
-    if (this.frozenT > 0 && el !== 'wind') {
+    if (this.frozenT > 0 && el !== 'wind' && el !== 'earth') {
       if (el === 'fire') {
         this.unfreeze();
         return { type: 'melt', mult: 2 };
@@ -591,7 +591,7 @@ export class Enemy {
     }
     const r = resolveReaction(this.aura, el);
     if (!r) {
-      if (el !== 'wind') {
+      if (el !== 'wind' && el !== 'earth') {
         this.aura = el;
         this.auraT = this.selfEl === el ? 1e9 : 9;
       }

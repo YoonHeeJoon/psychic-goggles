@@ -520,6 +520,23 @@ export class Solids {
   addCircle(x, z, r, top) {
     return this.insert({ kind: 'circle', x, z, r, top }, r);
   }
+  // take a solid out again (ice floes, summoned pillars)
+  remove(s) {
+    const i = this.list.indexOf(s);
+    if (i >= 0) this.list.splice(i, 1);
+    const r = s.kind === 'box' ? Math.hypot(s.hw, s.hd) : s.r;
+    const i0 = Math.floor((s.x - r) / this.cell),
+      i1 = Math.floor((s.x + r) / this.cell);
+    const j0 = Math.floor((s.z - r) / this.cell),
+      j1 = Math.floor((s.z + r) / this.cell);
+    for (let a = i0; a <= i1; a++)
+      for (let b = j0; b <= j1; b++) {
+        const list = this.map.get(this.key(a, b));
+        if (!list) continue;
+        const k = list.indexOf(s);
+        if (k >= 0) list.splice(k, 1);
+      }
+  }
   heightAt(x, z, probeY = Infinity) {
     const list = this.map.get(this.key(Math.floor(x / this.cell), Math.floor(z / this.cell)));
     let best = -Infinity;

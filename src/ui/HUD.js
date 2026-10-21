@@ -71,6 +71,7 @@ export class HUD {
        <div class="pill keyhint" data-act="bag"><b>B</b> 가방</div>
        <div class="pill keyhint" data-act="char"><b>C</b> 캐릭터</div>
        <div class="pill keyhint" data-act="comm"><b>J</b> 의뢰</div>
+       <div class="pill keyhint" data-act="party"><b>K</b> 파티</div>
        <div class="pill keyhint" data-act="menu"><b>Esc</b> 메뉴</div>`
     );
     L.appendChild(this.topRight);
@@ -84,7 +85,7 @@ export class HUD {
       'div',
       'hp-wrap',
       `<div class="hp-name"><span class="lv">Lv. 20</span><span class="nm"></span></div>
-       <div class="hp-bar"><div class="hp-fill"></div><div class="hp-text"></div></div>`
+       <div class="hp-bar"><div class="hp-fill"></div><div class="hp-shield"></div><div class="hp-text"></div></div>`
     );
     L.appendChild(this.hpWrap);
 
@@ -165,6 +166,7 @@ export class HUD {
     this.skills.querySelector('.e .ic').innerHTML = elementIcon(e.icon, e.color, 30);
     this.skills.querySelector('.q .ic').innerHTML = elementIcon(e.icon, '#fff', 38);
     this.skills.style.setProperty('--el', e.color);
+    this.skills.querySelector('.atk .ic').innerHTML = elementIcon(p.cfg.weapon === 'bow' ? 'bow' : 'sword', '#fff', 26);
   }
 
   update(s) {
@@ -173,6 +175,11 @@ export class HUD {
     const hpP = Math.max(0, p.hp / p.maxHp);
     this.hpWrap.querySelector('.hp-fill').style.width = `${hpP * 100}%`;
     this.hpWrap.querySelector('.hp-text').textContent = `${Math.ceil(p.hp)} / ${p.maxHp}`;
+    // shield overlay on the HP bar
+    const sh = s.shield;
+    const shEl = this.hpWrap.querySelector('.hp-shield');
+    shEl.style.width = sh ? `${Math.min(100, (sh.hp / p.maxHp) * 100)}%` : '0%';
+    if (sh) shEl.style.setProperty('--sc', sh.color);
     this.partyRows.forEach((r, i) => {
       const q = s.party[i];
       r.querySelector('.m-hp-fill').style.width = `${(q.hp / q.maxHp) * 100}%`;
@@ -313,7 +320,7 @@ export class HUD {
     for (const m of markers) {
       let x = W / 2 + (m.x - player.pos.x) * zoom;
       let y = W / 2 + (m.z - player.pos.z) * zoom;
-      if (m.shape === 'quest' || m.shape === 'comm') {
+      if (m.shape === 'quest' || m.shape === 'comm' || m.shape === 'friend') {
         // quest target sticks to the rim when it is out of range
         const dx = x - W / 2,
           dy = y - W / 2;
@@ -328,6 +335,19 @@ export class HUD {
         g.beginPath();
         g.arc(x, y, s + 3, 0, Math.PI * 2);
         g.fill();
+        if (m.shape === 'friend') {
+          // a new companion waiting somewhere: a star in their element colour
+          g.fillStyle = m.color;
+          g.beginPath();
+          for (let k = 0; k < 10; k++) {
+            const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+            const r = k % 2 ? s * 0.45 : s * 1.05;
+            g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+          }
+          g.closePath();
+          g.fill();
+          continue;
+        }
         g.fillStyle = m.shape === 'comm' ? '#c9a8ff' : '#ffd56a';
         g.beginPath();
         g.moveTo(x, y - s);

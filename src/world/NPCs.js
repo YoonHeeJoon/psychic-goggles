@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { CharacterModel } from '../character/CharacterModel.js';
 import { LANDMARKS, PORT_LEN, PORT_DIR, portWorld } from './Terrain.js';
 import { dampAngle, damp } from '../core/noise.js';
+import { Roster } from '../game/Roster.js';
+import { ELEMENTS } from '../character/characters.js';
 
 // Villagers of the windmill village. Each walks a small routine, turns to
 // look at you when you come close, says something now and then, and can be
@@ -176,7 +178,8 @@ export class NPCs {
     this.layer.className = 'npc-ui';
     game.container.appendChild(this.layer);
     const G = game.ground;
-    NPC_DEFS.forEach((d, k) => {
+    // companions not met yet wait out in the world
+    [...NPC_DEFS, ...Roster.recruitDefs()].forEach((d, k) => {
       const cfg = { id: 'npc-' + d.id, name: d.name, element: 'wind', weapon: 'catalyst', ...d.cfg };
       const model = new CharacterModel(cfg);
       model.weapon.visible = false;
@@ -248,7 +251,7 @@ export class NPCs {
     for (const n of this.list) {
       const d = n.def;
       const dist = Math.hypot(P.x - n.pos.x, P.z - n.pos.z);
-      const away = d.dayOnly && night > 0.5;
+      const away = (d.dayOnly && night > 0.5) || (d.recruit && g.roster && g.roster.has(d.recruit));
       const vis = dist < 110 && !away;
       n.model.root.visible = vis;
       if (!vis) {
@@ -335,6 +338,12 @@ export class NPCs {
   }
 
   minimapMarkers(P, out) {
+    // a star on the rim of the minimap points to anyone waiting to join
+    for (const n of this.list) {
+      const d = n.def;
+      if (!d.recruit || (this.g.roster && this.g.roster.has(d.recruit))) continue;
+      if (Math.abs(n.pos.x - P.x) < 260 && Math.abs(n.pos.z - P.z) < 260) out.push({ x: n.pos.x, z: n.pos.z, shape: 'friend', color: ELEMENTS[d.cfg.element].color });
+    }
     for (const n of this.list) {
       if (!n.model.root.visible) continue;
       if (Math.abs(n.pos.x - P.x) < 70 && Math.abs(n.pos.z - P.z) < 70) out.push({ x: n.pos.x, z: n.pos.z, color: '#ffe9a8', r: 3 });

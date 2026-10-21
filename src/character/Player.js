@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CharacterModel } from './CharacterModel.js';
-import { PARTY } from './characters.js';
+import { PARTY, STARTER_PARTY } from './characters.js';
 import { SPAWN, SEA_LEVEL } from '../world/Terrain.js';
 import { clamp, damp, dampAngle, angleDiff, smoothstep } from '../core/noise.js';
 
@@ -25,22 +25,17 @@ export class Player {
     this.group = new THREE.Group();
     game.scene.add(this.group);
 
-    this.party = PARTY.map((cfg, i) => {
+    // every character that exists; `party` is the four in play
+    this.roster = PARTY.map((cfg) => {
       const model = new CharacterModel(cfg);
-      model.root.visible = i === 0;
+      model.root.visible = false;
       this.group.add(model.root);
-      return {
-        cfg,
-        model,
-        maxHp: cfg.weapon === 'claymore' ? 13800 : 11200,
-        hp: cfg.weapon === 'claymore' ? 13800 : 11200,
-        energy: 40,
-        maxEnergy: 60,
-        skillCd: 0,
-        burstCd: 0,
-      };
+      const hp = cfg.weapon === 'claymore' ? 13800 : cfg.weapon === 'bow' ? 10600 : 11200;
+      return { cfg, model, maxHp: hp, hp, energy: 40, maxEnergy: 60, skillCd: 0, burstCd: 0 };
     });
+    this.party = STARTER_PARTY.map((id) => this.byId(id));
     this.active = 0;
+    this.party[0].model.root.visible = true;
 
     const y = this.terrain.heightAt(SPAWN.x, SPAWN.z);
     this.pos = new THREE.Vector3(SPAWN.x, y, SPAWN.z);
@@ -67,6 +62,22 @@ export class Player {
     this.animOverride = null;
     this.locked = false;
     this.forced = null;
+  }
+
+  byId(id) {
+    return this.roster.find((c) => c.cfg.id === id);
+  }
+
+  // swap in a new line-up (ids); keeps the current character active if present
+  setParty(ids) {
+    const list = ids.map((id) => this.byId(id)).filter(Boolean).slice(0, 4);
+    if (!list.length) return;
+    const cur = this.current;
+    for (const c of this.roster) c.model.root.visible = false;
+    this.party = list;
+    const i = list.indexOf(cur);
+    this.active = i >= 0 ? i : 0;
+    this.model.root.visible = true;
   }
 
   get current() {
@@ -180,6 +191,7 @@ export class Player {
       climbMoving: this.climbMoving,
       moving: this.vel.lengthSq() > 0.5,
       override: this.animOverride,
+      bowAim: this.bowAim,
     });
   }
 

@@ -6,7 +6,11 @@ export const ELEMENTS = {
   water: { name: '물', color: '#3fb6ff', glow: '#9fdcff', icon: 'water' },
   thunder: { name: '번개', color: '#c27bff', glow: '#e2b8ff', icon: 'thunder' },
   ice: { name: '얼음', color: '#9fe8ff', glow: '#d8f6ff', icon: 'ice' },
+  earth: { name: '바위', color: '#f0b84a', glow: '#ffe08a', icon: 'earth' },
 };
+
+// the four who start the journey; the rest join when you meet them
+export const STARTER_PARTY = ['aria', 'ren', 'mizu', 'rai'];
 
 export const PARTY = [
   {
@@ -104,5 +108,55 @@ export const PARTY = [
     },
     hair: { style: 'medium', length: 2.2, bangs: 9, ahoge: false, tail: 'pony' },
     outfit: { skirt: 'long', cape: false, sleeves: 'wide', coat: false },
+  },
+  {
+    id: 'seolha',
+    name: '설하',
+    title: '서리꽃 궁수',
+    element: 'ice',
+    weapon: 'bow',
+    female: true,
+    scale: 0.97,
+    recruit: { x: 60, z: -104, where: '설산 기슭' },
+    colors: {
+      skin: '#fff0e8',
+      hair: '#b9b4e6',
+      hairTip: '#d8f4ff',
+      eye: '#4f9ae8',
+      eye2: '#d8f4ff',
+      outfit: '#f6f9ff',
+      outfit2: '#4a7fc4',
+      dark: '#26304a',
+      gold: '#cfe2f2',
+      boots: '#e6edf8',
+      legs: '#2c3550',
+    },
+    hair: { style: 'long', length: 3.4, bangs: 9, ahoge: false, tail: 'pony' },
+    outfit: { skirt: 'flare', cape: true, sleeves: 'wide', coat: false },
+  },
+  {
+    id: 'karun',
+    name: '카룬',
+    title: '바위산의 방패',
+    element: 'earth',
+    weapon: 'claymore',
+    female: false,
+    scale: 1.1,
+    recruit: { x: 202, z: 262, where: '단풍 고원' },
+    colors: {
+      skin: '#f2cfb4',
+      hair: '#5a3e2c',
+      hairTip: '#e8b85a',
+      eye: '#e0a83a',
+      eye2: '#fff0b0',
+      outfit: '#8a6a44',
+      outfit2: '#e0b050',
+      dark: '#2e241a',
+      gold: '#f0c868',
+      boots: '#3e3024',
+      legs: '#4e4032',
+    },
+    hair: { style: 'medium', length: 1.7, bangs: 7, ahoge: false, tail: 'pony' },
+    outfit: { skirt: 'coat', cape: false, sleeves: 'long', coat: true },
   },
 ];

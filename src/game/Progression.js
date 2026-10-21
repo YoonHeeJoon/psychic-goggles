@@ -16,8 +16,10 @@ const NAMES = {
   ren: ['화염 돌진', '불새의 낙인'],
   mizu: ['물방울 결계', '해명의 비'],
   rai: ['뇌전 낙인', '천뢰'],
+  seolha: ['서리꽃 덫', '눈보라 결계'],
+  karun: ['바위 기둥', '대지 붕괴'],
 };
-const WEAPON = { sword: '한손검', claymore: '양손검', polearm: '장병기', catalyst: '법구' };
+const WEAPON = { sword: '한손검', claymore: '양손검', polearm: '장병기', catalyst: '법구', bow: '활' };
 
 export const levelCost = (lv) => 40 + (lv - BASE_LV) * 12;
 export const talentCost = (t) => 60 + (t - 1) * 45;
@@ -34,11 +36,14 @@ export class Progression {
     this.g = game;
     const prog = game.explore.progress;
     this.data = prog.chars || (prog.chars = {});
-    for (const c of game.player.party) {
-      const d = this.data[c.cfg.id] || (this.data[c.cfg.id] = { lv: BASE_LV, e: 1, q: 1 });
-      c.baseHp = c.maxHp;
-      this.apply(c, d, true);
-    }
+    for (const c of game.player.roster) this.ensure(c);
+  }
+
+  ensure(c) {
+    if (c.baseHp) return;
+    const d = this.data[c.cfg.id] || (this.data[c.cfg.id] = { lv: BASE_LV, e: 1, q: 1 });
+    c.baseHp = c.maxHp;
+    this.apply(c, d, true);
   }
 
   apply(c, d, fill = false) {
@@ -119,6 +124,13 @@ export class CharPanel {
     );
   }
 
+  // everyone who has joined, the party first
+  members() {
+    const P = this.g.player;
+    const have = this.g.roster ? this.g.roster.d.have : P.party.map((c) => c.cfg.id);
+    return [...P.party, ...P.roster.filter((c) => have.includes(c.cfg.id) && !P.party.includes(c))];
+  }
+
   open(tab) {
     this.sel = this.g.player.active;
     if (tab) this.tab = tab;
@@ -132,7 +144,7 @@ export class CharPanel {
 
   render() {
     const g = this.g;
-    const party = g.player.party;
+    const party = this.members();
     const G = g.gear;
     this.el.querySelectorAll('.pn-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === this.tab));
     this.el.querySelector('.pn-gems').innerHTML = `${elementIcon('gem', '#9fe8ff', 16)} <b>${g.gems}</b><span class="mat ore">광석 <b>${G.d.ore}</b></span><span class="mat ref">정제 <b>${G.d.refine}</b></span>`;
@@ -239,7 +251,7 @@ export class CharPanel {
     const rc = refineCost(sel.r);
     const ascOk = sel.asc < WEAPON_MAX_ASC && G.d.ore >= ac.ore && g.gems >= ac.gems;
     const refOk = sel.r < REFINE_MAX && G.d.refine >= rc.refine;
-    const wearer = sel.owner && sel.owner !== c.cfg.id ? g.player.party.find((p) => p.cfg.id === sel.owner) : null;
+    const wearer = sel.owner && sel.owner !== c.cfg.id ? g.player.byId(sel.owner) : null;
     this.detail.innerHTML = `
       ${this.weaponCard(sel)}
       <div class="wp-actions">
@@ -251,7 +263,7 @@ export class CharPanel {
       <div class="wp-list">${owned
         .map((x) => {
           const X = WEAPONS[x.id];
-          const by = x.owner ? g.player.party.find((p) => p.cfg.id === x.owner) : null;
+          const by = x.owner ? g.player.byId(x.owner) : null;
           return `<button class="wp-slot r${X.rarity} ${x === sel ? 'on' : ''}" data-u="${x.uid}"><img src="${gearIcon('weapon', X.type, X.rarity)}" alt=""><span class="nm">${X.name}</span><span class="rk">R${x.r} · +${x.asc}</span>${by ? `<img class="by" src="${by.portrait || ''}" alt="">` : ''}</button>`;
         })
         .join('')}</div>
@@ -268,7 +280,7 @@ export class CharPanel {
         }
       });
     q('.wp-asc').addEventListener('click', () => {
-      if (G.ascend(sel.owner ? g.player.party.find((p) => p.cfg.id === sel.owner) : null, sel) === 'ok') {
+      if (G.ascend(sel.owner ? g.player.byId(sel.owner) : null, sel) === 'ok') {
         g.hud.toast(`<b>${W.name}</b> 강화 · ${sel.asc}/${WEAPON_MAX_ASC}`, '#ffd36a');
         g.sfx.questStep();
         g.explore.save();
@@ -276,7 +288,7 @@ export class CharPanel {
       }
     });
     q('.wp-ref').addEventListener('click', () => {
-      if (G.refine(sel.owner ? g.player.party.find((p) => p.cfg.id === sel.owner) : null, sel) === 'ok') {
+      if (G.refine(sel.owner ? g.player.byId(sel.owner) : null, sel) === 'ok') {
         g.hud.toast(`<b>${W.name}</b> 정제 · R${sel.r}`, '#c9a8ff');
         g.sfx.cookDone();
         g.explore.save();
@@ -321,7 +333,7 @@ export class CharPanel {
     let actions = '';
     if (sel) {
       const cost = artLevelCost(sel.lv, sel.rarity);
-      const wearer = sel.owner && sel.owner !== c.cfg.id ? g.player.party.find((p) => p.cfg.id === sel.owner) : null;
+      const wearer = sel.owner && sel.owner !== c.cfg.id ? g.player.byId(sel.owner) : null;
       actions = `<div class="wp-actions">
         ${sel === cur ? '<button class="art-off">해제</button>' : `<button class="art-eq">${wearer ? `${wearer.cfg.name}에게서 가져와 장착` : '장착'}</button>`}
         <button class="art-up" ${sel.lv >= ART_MAX || g.gems < cost ? 'disabled' : ''}>${sel.lv >= ART_MAX ? '최대 강화' : `강화 +1 · ${elementIcon('gem', '#3a3020', 12)} ${cost}`}</button>
@@ -334,7 +346,7 @@ export class CharPanel {
       <div class="ch-sub">보유한 ${SLOTS.find((s) => s.id === this.slot).name} (${list.length})</div>
       <div class="art-list">${list
         .map((a) => {
-          const by = a.owner ? g.player.party.find((p) => p.cfg.id === a.owner) : null;
+          const by = a.owner ? g.player.byId(a.owner) : null;
           return `<button class="art-item r${a.rarity} ${a === sel ? 'on' : ''}" data-u="${a.uid}"><img src="${gearIcon('art', a.slot, a.rarity, SETS[a.set].color)}" alt=""><span class="lv">+${a.lv}</span>${by ? `<img class="by" src="${by.portrait || ''}" alt="">` : ''}</button>`;
         })
         .join('')}</div>`;
@@ -367,7 +379,7 @@ export class CharPanel {
       });
     if (q('.art-up'))
       q('.art-up').addEventListener('click', () => {
-        const owner = sel.owner ? g.player.party.find((p) => p.cfg.id === sel.owner) : null;
+        const owner = sel.owner ? g.player.byId(sel.owner) : null;
         if (G.levelArt(owner, sel) === 'ok') {
           g.sfx.blip && g.sfx.blip();
           if (sel.lv % 4 === 0) g.hud.toast(`<b>+${sel.lv}</b> · 부옵션 강화!`, '#ffd36a');

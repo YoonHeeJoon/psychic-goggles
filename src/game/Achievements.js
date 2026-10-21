@@ -34,6 +34,10 @@ const LIST = [
   { id: 'fishAll', name: '물고기 도감', desc: '모든 종류의 물고기 낚기', goal: 4, stat: 'fishKinds' },
   { id: 'wish', name: '바람에 띄운 소원', desc: '바람등불 축제에서 소원 등불 날리기', goal: 1, stat: 'wishes' },
   { id: 'sail', name: '바다로 나간 여행자', desc: '돛단배로 누적 1000m 항해하기', goal: 1000, stat: 'sail' },
+  { id: 'party6', name: '함께 걷는 바람', desc: '모든 동료와 만나기', goal: 6, stat: 'companions' },
+  { id: 'seals', name: '얼음과 바위의 비밀', desc: '얼음에 갇힌 상자와 바위에 막힌 상자 열기', goal: 2, stat: 'seals' },
+  { id: 'shields', name: '단단한 결의', desc: '보호막을 10번 얻기', goal: 10, stat: 'shields' },
+  { id: 'iceWalk', name: '서리 위를 걷다', desc: '얼음 발판으로 물 위를 200m 걷기', goal: 200, stat: 'iceWalk' },
 ];
 const REWARD = 20;
 
@@ -101,10 +105,12 @@ export class Achievements {
         return prog.bossKills || 0;
       case 'domain':
         return prog.domainClears || 0;
+      case 'companions':
+        return g.roster ? g.roster.d.have.length : 4;
       case 'fishKinds':
         return Object.keys(prog.fish || {}).length;
       case 'maxLv':
-        return Math.max(...g.player.party.map((c) => c.level || 20));
+        return Math.max(...g.player.roster.map((c) => c.level || 20));
       default:
         return this.st[stat] || 0;
     }

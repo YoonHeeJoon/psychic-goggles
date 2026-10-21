@@ -1,11 +1,13 @@
 import { Gear } from './Gear.js';
+import { STARTER_PARTY } from '../character/characters.js';
 
 // Save format versioning. Progress is one JSON object in localStorage; each
 // version bump adds a migration step so older saves load into the new game.
 //   v1  exploration, quest, characters, puzzles, achievements, stats
 //   v2  gear (weapons, artifacts, materials), daily commissions, reputation
+//   v3  roster: companions met and the chosen party of four
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'starwind.progress.v1';
 
 export function migrateSave(prog, party) {
@@ -14,8 +16,9 @@ export function migrateSave(prog, party) {
     prog.rep = prog.rep || { village: { xp: 0, got: [] }, port: { xp: 0, got: [] } };
     prog.comm = prog.comm || null;
   }
-  // always make sure every party member holds a weapon
-  Gear.migrate(prog, party);
+  if (v < 3 || !prog.roster) prog.roster = { have: [...STARTER_PARTY], party: [...STARTER_PARTY] };
+  // always make sure everyone who has joined holds a weapon
+  Gear.migrate(prog, party.filter((c) => prog.roster.have.includes(c.id)));
   prog.v = SAVE_VERSION;
   return prog;
 }

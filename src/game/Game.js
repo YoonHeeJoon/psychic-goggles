@@ -28,6 +28,8 @@ import { Domain } from './Domain.js';
 import { Achievements } from './Achievements.js';
 import { Photo } from './Photo.js';
 import { Fishing } from './Fishing.js';
+import { Roster } from './Roster.js';
+import { Frost } from '../world/Frost.js';
 import { Boat } from './Boat.js';
 import { Festival } from '../world/Festival.js';
 import { Snow } from '../world/Snow.js';
@@ -103,6 +105,8 @@ export class Game {
     this.gathering = new Gathering(this);
     Puzzles.reserve(this.terrain);
     Fishing.reserve(this.terrain);
+    Frost.reserve(this.terrain);
+    for (const c of PARTY) if (c.recruit) this.terrain.addBlocker(c.recruit.x, c.recruit.z, 3);
     this.scene.add(this.terrain.buildMesh(q.terrainStep));
 
     loader.set(0.35, '하늘과 바다를 칠하는 중...');
@@ -126,6 +130,7 @@ export class Game {
     this.explore.build();
     this.gear = new Gear(this);
     this.progression = new Progression(this);
+    this.roster = new Roster(this);
     this.weather = new Weather(this);
     this.wildlife = new Wildlife(this);
     this.footprints = new Footprints(this.scene, this.ground);
@@ -136,6 +141,7 @@ export class Game {
     this.puzzles = new Puzzles(this);
     this.domain = new Domain(this);
     this.festival = new Festival(this);
+    this.frost = new Frost(this);
     this.snow = new Snow(this.scene);
     this.fishing = new Fishing(this);
     this.boat = new Boat(this);
@@ -207,6 +213,10 @@ export class Game {
         if (this.state === 'playing') this.openPanel(this.charPanel);
         else if (this.state === 'panel' && this.panel === this.charPanel) this.closePanel();
       }
+      if (code === 'KeyK') {
+        if (this.state === 'playing') this.openPanel(this.roster);
+        else if (this.state === 'panel' && this.panel === this.roster) this.closePanel();
+      }
       if (code === 'KeyJ') {
         if (this.state === 'playing') this.openPanel(this.commissions);
         else if (this.state === 'panel' && this.panel === this.commissions) this.closePanel();
@@ -241,7 +251,7 @@ export class Game {
     shared.uSunDir.value.set(0.4, 0.6, 0.7).normalize();
     const prevClear = this.renderer.getClearAlpha();
     this.renderer.setClearColor(0x000000, 0);
-    for (const p of this.player.party) {
+    for (const p of this.player.roster) {
       const m = p.model;
       const parent = m.root.parent;
       const vis = m.root.visible;
@@ -453,6 +463,7 @@ export class Game {
 
   // ---- dialogue
   talkTo(npc) {
+    if (npc.def && npc.def.recruit) return this.runScript(npc, this.roster.script(npc));
     return this.runScript(npc, this.commissions.wrapTalk(npc, this.quest.script(npc)));
   }
 
@@ -862,6 +873,8 @@ export class Game {
       const gdt = stop ? dt * 0.06 : dt;
       C.update(gdt, this.input);
       this.explore.preUpdate(gdt);
+      // floes freeze ahead of an ice character before they step onto them
+      this.frost.update(gdt);
       P.update(gdt, this.input, this.cameraCtl.yaw);
       this.cameraCtl.update(dt, this.input, P);
       this.handleEvents();
@@ -869,6 +882,7 @@ export class Game {
       C.lateUpdate(gdt, dt);
     } else if (this.state === 'map' || this.state === 'panel') {
       this.combat.lateUpdate(0, dt);
+      if (this.panel === this.roster) this.roster.updateShowcase(dt);
     } else if (this.state === 'dialog') {
       this.combat.lateUpdate(0, dt);
       this.updateDialogCamera(dt);
@@ -903,6 +917,7 @@ export class Game {
         this.swapPop = null;
       }
     }
+    if (this.state !== 'playing' && this.state !== 'paused' && this.state !== 'loading' && this.state !== 'title') this.frost.update(dt);
     if (this.state !== 'paused' && this.state !== 'loading') {
       this.gathering.update(dt);
       this.npcs.update(dt);
@@ -958,6 +973,7 @@ export class Game {
       time: this.env.time,
       region: this.frame % 15 === 0 ? this.regionAt(P.pos.x, P.pos.z) : null,
       gems: this.gems,
+      shield: this.combat.shields.cur ? { hp: this.combat.shields.cur.hp, color: ELEMENTS[this.combat.shields.cur.el] ? ELEMENTS[this.combat.shields.cur.el].color : '#ffd86a' } : null,
     });
     if (this.frame % 2 === 0) {
       const markers = [];
@@ -972,6 +988,7 @@ export class Game {
       this.npcs.minimapMarkers(P, markers);
       this.quest.minimapMarker(markers);
       this.commissions.minimapMarkers(markers);
+      this.frost.minimapMarkers(P, markers);
       this.hud.drawMinimap(P, this.cameraCtl.yaw, markers);
     }
     this.fpsAcc += dt;
