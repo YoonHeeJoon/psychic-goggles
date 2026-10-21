@@ -38,13 +38,23 @@ export class Photo {
          <button class="ph-exit">나가기</button>
        </div>
        <div class="ph-hint">드래그 · 회전 &nbsp; 휠 · 거리 &nbsp; Shift+드래그 · 높이</div>
-       <a class="ph-last hidden" download="starwind-photo.png" target="_blank"><img alt="마지막 사진"><span>저장</span></a>`
+       <div class="ph-last hidden"><img alt="마지막 사진"><button class="ph-save">저장</button></div>`
     );
     game.container.appendChild(this.el);
     this.active = false;
     this.filter = 0;
     this.pose = 0;
+    // inside the claude.ai viewer files go through its downloads capability
+    // (the viewer confirms each save); a standalone page uses a normal link
+    this.dl = null;
+    this.inViewer = !!(window.claude && window.claude.use);
+    if (this.inViewer)
+      window.claude
+        .use('downloads')
+        .then((d) => (this.dl = d))
+        .catch(() => {});
     const q = (s) => this.el.querySelector(s);
+    q('.ph-save').addEventListener('click', () => this.save());
     this.el.querySelectorAll('.ph-filters button').forEach((b) => b.addEventListener('click', () => this.setFilter(+b.dataset.f)));
     q('.ph-time').addEventListener('input', (e) => (game.env.time = +e.target.value));
     q('.ph-pose').addEventListener('click', () => this.nextPose());
@@ -172,19 +182,40 @@ export class Photo {
     fl.classList.add('go');
     g.sfx.shutter();
     if (!url) return;
+    this.lastUrl = url;
     const a = this.el.querySelector('.ph-last');
-    a.href = url;
     a.querySelector('img').src = url;
     a.classList.remove('hidden');
+    a.querySelector('.ph-save').hidden = this.inViewer && !this.dl;
     g.achievements.add('photos');
-    try {
-      const dl = document.createElement('a');
-      dl.href = url;
-      dl.download = `starwind-${Date.now()}.png`;
-      document.body.appendChild(dl);
-      dl.click();
-      dl.remove();
-    } catch (e) {}
+  }
+
+  // offer the last photo as a PNG file (only on an explicit click)
+  async save() {
+    const g = this.g;
+    if (!this.lastUrl) return;
+    const filename = `starwind-${Date.now()}.png`;
+    if (this.dl) {
+      try {
+        const bin = atob(this.lastUrl.split(',')[1]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        await this.dl.save({ filename, data: bytes });
+        g.hud.toast('사진을 저장했습니다', '#9fe8ff');
+      } catch (e) {
+        const code = e && e.code;
+        if (code === 'rate_limited') g.hud.toast('잠시 후 다시 시도해 주세요', '#ffd36a');
+        else if (code && code !== 'declined') g.hud.toast('이 화면에서는 사진을 저장할 수 없습니다', '#ffd36a');
+      }
+      return;
+    }
+    if (this.inViewer) return;
+    const dl = document.createElement('a');
+    dl.href = this.lastUrl;
+    dl.download = filename;
+    document.body.appendChild(dl);
+    dl.click();
+    dl.remove();
   }
 
   update(dt) {

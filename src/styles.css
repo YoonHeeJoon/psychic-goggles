@@ -527,6 +527,7 @@ details.keys summary { cursor: pointer; padding: 6px 0; color: var(--gold); }
 .ph-shot { width: 52px; height: 52px; border-radius: 50%; border: 3px solid #fff; background: radial-gradient(circle, #fff 55%, rgba(255,255,255,.2) 58%); cursor: pointer; }
 .ph-shot:active { transform: scale(.94); }
 .ph-hint { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: .7; text-shadow: 0 1px 3px rgba(0,0,0,.7); pointer-events: none; }
-.ph-last { position: absolute; right: 18px; bottom: 96px; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #fff; text-decoration: none; font-size: 12px; }
+.ph-last { position: absolute; right: 18px; bottom: 96px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ph-save { padding: 6px 18px; border-radius: 16px; border: 0; font: 600 12px var(--font); color: #3a3020; background: linear-gradient(180deg, #fffaf0, #ecdcb2); cursor: pointer; }
 .ph-last.hidden { display: none; }
 .ph-last img { width: 150px; border-radius: 6px; box-shadow: 0 0 0 2px #fff, 0 6px 18px rgba(0,0,0,.4); }
