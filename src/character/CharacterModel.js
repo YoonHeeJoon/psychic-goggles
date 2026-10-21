@@ -410,10 +410,22 @@ function buildHair(cfg, R) {
       }
     }
   }
+  // head-space position (unit radius) for the angel-ring highlight
+  const headAttr = (g, off) => {
+    const p = g.attributes.position;
+    const a = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      a[i * 3] = (p.getX(i) + off.x) / R;
+      a[i * 3 + 1] = (p.getY(i) + off.y) / R;
+      a[i * 3 + 2] = (p.getZ(i) + off.z) / R;
+    }
+    g.setAttribute('aHead', new THREE.BufferAttribute(a, 3));
+    return g;
+  };
   return {
-    front: mergeGeometries(front),
-    back: mergeGeometries(back),
-    tails: tailAnchors.map((A, k) => ({ anchor: A, geo: mergeGeometries(tail.filter((t) => t.anchor === k).map((t) => t.g)) })),
+    front: headAttr(mergeGeometries(front), C0),
+    back: headAttr(mergeGeometries(back), C0),
+    tails: tailAnchors.map((A, k) => ({ anchor: A, geo: headAttr(mergeGeometries(tail.filter((t) => t.anchor === k).map((t) => t.g)), A) })),
   };
 }
 
@@ -485,6 +497,8 @@ export class CharacterModel {
     }
     this.t = 0;
     this.phase = 0;
+    this.steps = 0; // footfall counter (read by the audio)
+    this.grabs = 0; // climbing hand-hold counter
     this.blinkT = 2 + Math.random() * 2;
     this.springs = [];
     this.meshes = [];
@@ -505,6 +519,9 @@ export class CharacterModel {
       side: opts.side,
       map: opts.map,
       ramp: opts.ramp ?? 0.0,
+      face: opts.face,
+      headR: opts.headR,
+      ring: opts.ring,
     });
   }
 
@@ -651,7 +668,7 @@ export class CharacterModel {
     headGroup.position.set(0, R * 0.95, 0.008);
     j.head.add(headGroup);
     this.headGroup = headGroup;
-    this.add(headGroup, head, c.skin);
+    this.add(headGroup, head, c.skin, { face: true, headR: R });
     // ears (mostly hidden by hair)
     for (const s of [-1, 1]) {
       const ear = new THREE.SphereGeometry(0.022, 10, 8);
@@ -663,14 +680,14 @@ export class CharacterModel {
     deformHead(decal, R * 1.006);
     this.faceOpen = drawFace(cfg, false);
     this.faceClosed = drawFace(cfg, true);
-    this.faceMat = faceDecalMaterial(this.faceOpen);
+    this.faceMat = faceDecalMaterial(this.faceOpen, R * 1.006);
     const face = new THREE.Mesh(decal, this.faceMat);
     face.renderOrder = 1;
     headGroup.add(face);
 
     // hair
     const hair = buildHair(cfg, R);
-    const hairOpts = { color2: c.hairTip, spec: 0.35, rim: 0.5, shadowTint: '#a8a0d0', outlineColor: outlineColorFor(c.hair) };
+    const hairOpts = { color2: c.hairTip, spec: 0.0, ring: 0.7, rim: 0.5, shadowTint: '#a8a0d0', outlineColor: outlineColorFor(c.hair) };
     this.add(headGroup, hair.front, c.hair, hairOpts);
     const backPivot = new THREE.Group();
     backPivot.position.set(0, R * 0.5, -R * 0.2);
@@ -968,7 +985,9 @@ export class CharacterModel {
     if (mode === 'run' || mode === 'walk') {
       const s = clamp((sp - 2) / 7, 0, 1);
       const stride = 1.1 + sp * 0.42;
+      const half = Math.floor(this.phase / Math.PI);
       this.phase += (dt * Math.PI * 2 * sp) / stride;
+      if (Math.floor(this.phase / Math.PI) !== half) this.steps++; // a foot touched down
       const ph = this.phase;
       const AL = lerp(0.42, 0.85, s),
         AA = lerp(0.3, 0.95, s);
@@ -1023,7 +1042,9 @@ export class CharacterModel {
       P.head.x = -0.2;
       blend = 7;
     } else if (mode === 'climb') {
+      const half = Math.floor(this.phase / Math.PI);
       if (st.climbMoving) this.phase += dt * 6.5;
+      if (Math.floor(this.phase / Math.PI) !== half) this.grabs++;
       const ph = this.phase;
       const sn = Math.sin(ph);
       P.uArmL.x = -2.55 + 0.45 * sn;
@@ -1096,6 +1117,11 @@ export class CharacterModel {
       P.hips.z = 0.02;
       hipsY = -0.004 * b;
       blend = 6;
+      hipsY += this.idleVariation(dt, P);
+    }
+    if (mode !== 'idle') {
+      this.idleT = 0;
+      this.idleVar = null;
     }
     if (st.override) {
       const r = st.override(P, this);
@@ -1140,6 +1166,72 @@ export class CharacterModel {
         this.blinkT = 2 + Math.random() * 3.5;
       }
     }
+  }
+
+  // Occasional idle fidgets: look around, stretch, shift weight, scuff a foot.
+  // Only pose targets are set; the joint slerp smooths the transitions.
+  idleVariation(dt, P) {
+    this.idleT = (this.idleT || 0) + dt;
+    if (this.nextIdle === undefined) this.nextIdle = 5 + Math.random() * 4;
+    if (!this.idleVar && this.idleT > this.nextIdle) {
+      const kinds = ['look', 'stretch', 'shift', 'scuff', 'look'];
+      let k = kinds[Math.floor(Math.random() * kinds.length)];
+      if (k === this.lastIdle) k = kinds[(kinds.indexOf(k) + 1) % kinds.length];
+      this.lastIdle = k;
+      this.idleVar = { k, t: 0, dur: { look: 3.6, stretch: 2.8, shift: 4.2, scuff: 1.8 }[k] };
+    }
+    const v = this.idleVar;
+    if (!v) return 0;
+    v.t += dt;
+    const u = v.t / v.dur;
+    const env = smoothstep(0, 0.12, u) * smoothstep(1, 0.82, u);
+    let dy = 0;
+    if (v.k === 'look') {
+      const side = u < 0.5 ? 1 : -1;
+      P.head.y = 0.55 * side * env;
+      P.neck.y = 0.3 * side * env;
+      P.chest.y = 0.1 * side * env;
+      P.head.x = -0.06 * env;
+    } else if (v.k === 'stretch') {
+      const up = smoothstep(0.1, 0.35, u) * smoothstep(0.85, 0.65, u);
+      P.uArmL.x = -2.75 * up + 0.06;
+      P.uArmR.x = -2.75 * up + 0.06;
+      P.uArmL.z = 0.11 + 0.15 * up;
+      P.uArmR.z = -0.11 - 0.15 * up;
+      P.fArmL.x = -0.22 - 0.35 * up;
+      P.fArmR.x = -0.22 - 0.35 * up;
+      P.spine.x = -0.14 * up;
+      P.neck.x = -0.12 * up;
+      P.head.x = -0.18 * up;
+      dy = 0.02 * up;
+    } else if (v.k === 'shift') {
+      P.hips.z = 0.02 + 0.06 * env;
+      P.thighL.z = 0.035 + 0.04 * env;
+      P.thighR.x = -0.04 - 0.14 * env;
+      P.shinR.x = 0.08 + 0.3 * env;
+      P.footR.x = -0.12 * env;
+      // hand on hip
+      P.uArmL.z = 0.11 + 0.5 * env;
+      P.uArmL.x = 0.06 + 0.25 * env;
+      P.fArmL.x = -0.22 - 1.35 * env;
+      P.handL.z = -0.4 * env;
+      P.chest.z = -0.04 * env;
+      P.head.z = 0.05 * env + 0.04 * Math.sin(this.t * 0.23);
+      dy = -0.01 * env;
+    } else if (v.k === 'scuff') {
+      const w = Math.sin(u * Math.PI * 3);
+      P.thighR.x = -0.04 - (0.25 + 0.18 * w) * env;
+      P.shinR.x = 0.08 + (0.35 - 0.15 * w) * env;
+      P.footR.x = 0.2 * w * env;
+      P.head.x = 0.16 * env;
+      P.neck.x = 0.08 * env;
+    }
+    if (v.t >= v.dur) {
+      this.idleVar = null;
+      this.idleT = 0;
+      this.nextIdle = 6 + Math.random() * 6;
+    }
+    return dy;
   }
 
   updateSprings(dt, st) {

@@ -402,6 +402,7 @@ export class Menus {
           <div><b>좌클릭</b> 일반 공격</div><div><b>E</b> 원소 스킬</div><div><b>Q</b> 원소 폭발</div><div><b>1-4</b> 캐릭터 교체</div>
           <div><b>F</b> 상호작용</div><div><b>M</b> 지도 · 순간이동</div><div><b>상승 기류</b> 하늘로 비상</div><div><b>H</b> 도움말</div>
         </div>
+        <div class="touch-controls"><b>왼쪽</b> 끌어서 이동 · <b>오른쪽</b> 끌어서 시점 · 버튼으로 공격 · 스킬 · 점프 · 질주<br>초상화를 눌러 캐릭터 교체 · 활공 중 공격 버튼으로 낙하 공격</div>
       </div>
       <div class="title-foot">Three.js로 만든 오리지널 오픈월드 · 모든 캐릭터와 지역은 창작물입니다</div>`
     );
@@ -415,9 +416,12 @@ export class Menus {
           .map(([k, v]) => `<option value="${k}">${v.label}</option>`)
           .join('')}</select><small>풀 밀도·그림자·해상도가 바로 바뀝니다</small></label>
         <label>마우스 감도 <input type="range" class="sens" id="opt-sens" min="0.3" max="2.5" step="0.05" value="1"></label>
+        <label>소리 크기 <input type="range" class="vol" id="opt-vol" min="0" max="1" step="0.05" value="0.8"></label>
+        <label class="row"><input type="checkbox" class="mute" id="opt-mute"> 소리 끄기</label>
         <label>시간 <input type="range" class="tod" id="opt-tod" min="0" max="24" step="0.05" value="9"></label>
         <label>시간 흐름 <select class="tspeed" id="opt-tspeed"><option value="0">멈춤</option><option value="1" selected>보통 (하루 24분)</option><option value="6">빠름</option><option value="30">매우 빠름</option></select></label>
         <label class="row"><input type="checkbox" class="inv" id="opt-inv"> 상하 반전</label>
+        <label class="row"><input type="checkbox" class="autores" id="opt-autores"> 자동 해상도 (프레임 유지)</label>
         <label class="row"><input type="checkbox" class="showfps" id="opt-showfps"> FPS 표시</label>
         <button class="resume">계속하기</button>
       </div>`
@@ -448,9 +452,18 @@ export class Menus {
       mark();
     });
     P.querySelector('.sens').addEventListener('input', (e) => (g.cameraCtl.sensitivity = +e.target.value));
+    const vol = P.querySelector('.vol'),
+      mute = P.querySelector('.mute');
+    vol.value = g.sfx.volume;
+    mute.checked = g.sfx.muted;
+    vol.addEventListener('input', (e) => g.sfx.setVolume(+e.target.value));
+    mute.addEventListener('change', (e) => g.sfx.setMuted(e.target.checked));
     P.querySelector('.tod').addEventListener('input', (e) => (g.env.time = +e.target.value));
     P.querySelector('.tspeed').addEventListener('change', (e) => (g.env.timeScale = +e.target.value / 60));
     P.querySelector('.inv').addEventListener('change', (e) => (g.cameraCtl.invertY = e.target.checked));
+    const ar = P.querySelector('.autores');
+    ar.checked = g.autoRes;
+    ar.addEventListener('change', (e) => g.setAutoRes(e.target.checked));
     P.querySelector('.showfps').addEventListener('change', (e) => g.hud.fps.classList.toggle('hidden', !e.target.checked));
     P.querySelector('.resume').addEventListener('click', () => g.resume());
   }

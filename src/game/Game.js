@@ -5,6 +5,7 @@ import { shared } from '../render/shaders.js';
 import { Terrain, SPAWN, LANDMARKS } from '../world/Terrain.js';
 import { Environment } from '../world/Environment.js';
 import { Water } from '../world/Water.js';
+import { Horizon } from '../world/Horizon.js';
 import { Grass } from '../world/Grass.js';
 import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
@@ -15,7 +16,9 @@ import { Combat } from '../combat/Combat.js';
 import { Structures } from '../world/Structures.js';
 import { Exploration } from './Exploration.js';
 import { WorldMap } from '../ui/WorldMap.js';
-import { damp } from '../core/noise.js';
+import { TouchControls } from '../ui/Touch.js';
+import { damp, smoothstep } from '../core/noise.js';
+import { Sound } from '../audio/Sound.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
@@ -31,6 +34,19 @@ export class Game {
     // debug: fixed timestep (?dt=0.033) for deterministic captures
     const fdt = parseFloat(new URLSearchParams(location.search).get('dt'));
     this.fixedDt = fdt > 0 && fdt < 0.2 ? fdt : 0;
+    this.sfx = new Sound();
+    // dynamic resolution keeps the frame rate up on slower GPUs
+    this.autoRes = !this.fixedDt;
+    try {
+      if (localStorage.getItem('starwind.autores') === '0') this.autoRes = false;
+    } catch (e) {}
+    this.resT = 0;
+    this.resN = 0;
+    this.resCool = 3;
+    this.lastSteps = 0;
+    this.lastGrabs = 0;
+    this.ambT = 0;
+    this.amb = { alt: 0, speed: 0, air: false, night: 0, day: 1, water: 0, forest: 0, snow: 0, active: false };
   }
 
   async init() {
@@ -60,6 +76,7 @@ export class Game {
     await nextFrame();
     this.env = new Environment(this.scene, q);
     this.water = new Water(this.scene);
+    this.horizon = new Horizon(this.scene);
 
     loader.set(0.5, '풀과 나무를 심는 중...');
     await nextFrame();
@@ -82,6 +99,7 @@ export class Game {
     this.hud.setParty(this.player.party, this.player.active);
     this.menus = new Menus(this.container, this);
     this.worldMap = new WorldMap(this.container, this);
+    if (TouchControls.wanted()) this.touch = new TouchControls(this);
     this.tpFade = document.createElement('div');
     this.tpFade.className = 'tp-fade';
     this.container.appendChild(this.tpFade);
@@ -114,6 +132,13 @@ export class Game {
       if (e.code === 'Escape' && this.state === 'map') this.closeMap();
     });
     window.addEventListener('beforeunload', () => this.explore.save());
+    // audio unlocks on the first gesture; every button gets a soft click
+    const unlock = () => this.sfx.unlock();
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    this.container.addEventListener('click', (e) => {
+      if (e.target.closest && e.target.closest('button')) this.sfx.click();
+    });
     this.loop();
     window.__game = this;
   }
@@ -186,6 +211,7 @@ export class Game {
     this.menus.hideTitle();
     this.hud.show();
     this.state = 'playing';
+    this.sfx.unlock();
     this.input.enabled = true;
     this.input.requestLock();
     this.cameraCtl.initialized = false;
@@ -198,6 +224,7 @@ export class Game {
   pause() {
     this.state = 'paused';
     this.menus.showPause();
+    this.sfx.open();
   }
 
   resume() {
@@ -216,11 +243,13 @@ export class Game {
     this.hud.setPrompt('');
     this.explore.promptText = '';
     this.worldMap.open(focus);
+    this.sfx.open();
   }
 
   closeMap() {
     if (this.state !== 'map') return;
     this.worldMap.close();
+    this.sfx.close();
     this.state = 'playing';
     this.input.enabled = true;
     this.input.requestLock();
@@ -235,6 +264,7 @@ export class Game {
     const P = this.player;
     P.locked = true;
     this.tpFade.classList.add('on');
+    this.sfx.teleport();
     setTimeout(() => {
       const a = Math.atan2(wp.x - LANDMARKS.statue.x, wp.z - LANDMARKS.statue.z) + 0.6;
       const x = wp.x + Math.sin(a) * 2.8,
@@ -295,9 +325,70 @@ export class Game {
     u.uFlash.value = Math.max(u.uFlash.value, amount);
   }
 
+  // what the player is standing on (for footstep sounds)
+  surfaceAt() {
+    const P = this.player;
+    if (P.state === 'swim') return 'water';
+    const x = P.pos.x,
+      z = P.pos.z;
+    const th = this.terrain.heightAt(x, z);
+    if (th < 0.3) return 'water';
+    if (P.pos.y > th + 0.35) return Math.hypot(x - LANDMARKS.village.x, z - LANDMARKS.village.z) < 70 ? 'wood' : 'stone';
+    if (th > 126) return 'snow';
+    if (Math.hypot(x - LANDMARKS.village.x, z - LANDMARKS.village.z) < 15) return 'stone';
+    if (this.terrain.pathDistance(x, z) < 2.4) return 'path';
+    if (this.terrain.grassAt(x, z) < 0.22) return 'stone';
+    return 'grass';
+  }
+
+  // ambient mix inputs, refreshed a few times per second
+  updateAudio(dt) {
+    const s = this.sfx;
+    if (!s.ctx) return;
+    const P = this.player;
+    const m = P.model;
+    if (this.state === 'playing') {
+      if (m.steps !== this.lastSteps) {
+        const sprint = P.speed > 7 ? 1.25 : P.speed < 3 ? 0.7 : 1;
+        s.footstep(this.surfaceAt(), sprint);
+      }
+      if (m.grabs !== this.lastGrabs) s.climbGrab();
+    }
+    this.lastSteps = m.steps;
+    this.lastGrabs = m.grabs;
+    this.ambT -= dt;
+    const A = this.amb;
+    if (this.ambT <= 0) {
+      this.ambT = 0.25;
+      const pos = this.state === 'playing' || this.state === 'paused' || this.state === 'map' ? P.pos : this.camera.position;
+      let wet = 0;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        for (const r of [10, 28]) if (this.terrain.heightAt(pos.x + Math.cos(a) * r, pos.z + Math.sin(a) * r) < 0.2) wet += r === 10 ? 1 / 8 : 0.5 / 8;
+      }
+      A.water = Math.min(1, wet);
+      A.forest = Math.min(1, this.terrain.forestAt(pos.x, pos.z) * 1.3 + 0.15);
+      A.snow = smoothstep(95, 135, pos.y);
+      A.alt = Math.max(0, pos.y - this.terrain.heightAt(pos.x, pos.z) * 0.6);
+      A.night = shared.uNight.value;
+      A.day = smoothstep(-0.02, 0.1, this.env.sunDir.y);
+    }
+    A.speed = this.state === 'playing' ? P.vel.length() : 0;
+    A.air = P.state === 'glide' || (P.state === 'air' && P.vel.y < -6);
+    A.active = this.state === 'playing' || this.state === 'title';
+    s.update(dt, A);
+  }
+
   handleEvents() {
     for (const e of this.player.events) {
       this.combat.onPlayerEvent(e);
+      const s = this.sfx;
+      if (e.type === 'jump' || e.type === 'vault') s.jump();
+      else if (e.type === 'land') s.land(e.impact || 4, this.surfaceAt());
+      else if (e.type === 'glide') s.glider();
+      else if (e.type === 'splash') s.splash();
+      else if (e.type === 'climb') s.climbGrab();
+      else if (e.type === 'switch') s.swap(this.player.current.cfg.element);
       if (e.type === 'switch') {
         const p = this.player.current;
         this.hud.setActive(this.player.party, this.player.active);
@@ -328,12 +419,62 @@ export class Game {
 
   loop() {
     requestAnimationFrame(() => this.loop());
-    const real = Math.min(this.clock.getDelta(), 1 / 20);
+    const raw = this.clock.getDelta();
+    const real = Math.min(raw, 1 / 20);
     const dt = this.fixedDt || real;
     this.frame++;
+    this.adaptResolution(raw);
     this.update(dt);
+    this.updateRays();
     this.rendererW.render();
     this.input.endFrame();
+  }
+
+  // Lower the render scale when the frame rate sags, raise it again when
+  // there is headroom. Decisions use ~2 s windows and a cooldown.
+  adaptResolution(raw) {
+    if (!this.autoRes || this.state !== 'playing' || raw > 1.5) return;
+    this.resT += raw;
+    this.resN++;
+    this.resCool -= raw;
+    if (this.resT < 2) return;
+    const fps = this.resN / this.resT;
+    this.resT = 0;
+    this.resN = 0;
+    if (this.resCool > 0) return;
+    const R = this.rendererW;
+    let s = R.scale;
+    if (fps < 42 && s > 0.55) s = Math.max(0.55, s - (fps < 30 ? 0.15 : 0.1));
+    else if (fps > 57 && s < 1) s = Math.min(1, s + 0.05);
+    if (s !== R.scale) {
+      R.setScale(s, this.camera);
+      this.resCool = 2.5;
+    }
+  }
+
+  setAutoRes(on) {
+    this.autoRes = on;
+    try {
+      localStorage.setItem('starwind.autores', on ? '1' : '0');
+    } catch (e) {}
+    if (!on) this.rendererW.setScale(1, this.camera);
+  }
+
+  // sun shafts by day (stronger when the sun is low), faint moon shafts at night
+  updateRays() {
+    const env = this.env;
+    this.camera.updateMatrixWorld();
+    const col = this._rayCol || (this._rayCol = new THREE.Color());
+    const s = env.sunDir;
+    const day = smoothstep(-0.03, 0.06, s.y);
+    if (day > 0.02) {
+      const low = 1 - smoothstep(0.08, 0.6, s.y);
+      col.copy(shared.uSunColor.value).multiplyScalar(0.17 * (1 + 1.0 * low));
+      this.rendererW.updateRays(this.camera, s, col, day);
+    } else {
+      col.setRGB(0.5, 0.62, 1.0).multiplyScalar(0.1);
+      this.rendererW.updateRays(this.camera, env.moonDir, col, shared.uNight.value);
+    }
   }
 
   update(dt) {
@@ -358,13 +499,16 @@ export class Game {
       this.combat.lateUpdate(0, dt);
     }
     this.structures.update(dt, shared.uWindStrength.value);
+    if (this.touch) this.touch.setVisible(this.state === 'playing');
     const gu = this.rendererW.grade.uniforms;
     gu.uFlash.value = Math.max(0, gu.uFlash.value - dt * 2.2);
     if (this.state !== 'paused') this.env.update(dt, P.pos);
     this.env.followCamera(this.camera);
     this.water.update(this.camera);
+    this.vegetation.update(this.camera);
     this.grass.update(this.state === 'playing' ? P.pos : this.camera.position);
     shared.uPlayerPos.value.copy(P.pos);
+    this.updateAudio(dt);
 
     if (this.state === 'playing' || this.state === 'paused') this.updateHUD(dt);
   }
@@ -398,7 +542,8 @@ export class Game {
     this.fpsAcc += dt;
     this.fpsN++;
     if (this.fpsAcc > 0.5) {
-      this.hud.fps.textContent = `${Math.round(this.fpsN / this.fpsAcc)} FPS · ${this.qualityKey}`;
+      const sc = this.rendererW.scale;
+      this.hud.fps.textContent = `${Math.round(this.fpsN / this.fpsAcc)} FPS · ${this.qualityKey}${sc < 0.999 ? ` · ${Math.round(sc * 100)}%` : ''}`;
       this.fpsAcc = 0;
       this.fpsN = 0;
     }

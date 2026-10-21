@@ -369,6 +369,7 @@ export class Exploration {
         lift = Math.max(lift, 1 + 10 * smoothstep(u.top + 1, u.top - 12, P.pos.y));
       }
     }
+    if (lift > 0 && !(P.updraft > 0)) this.g.sfx.updraft();
     P.updraft = lift;
   }
 
@@ -515,6 +516,7 @@ export class Exploration {
     this.vfx.ring(o.pos, '#9ff0e0', 2.2, 0.6);
     this.vfx.flash(o.pos, '#ffffff', 1.2, 0.25);
     this.g.hud.toast(`<b>별바람의 눈</b> 획득 · ${got} / ${total}`, '#5fe3c0');
+    this.g.sfx.orb();
     if (got === 1) setTimeout(() => this.g.hud.flashCenter('바람의 수호상에 바치면 최대 기력이 늘어납니다', 2600), 900);
     this.save();
   }
@@ -529,7 +531,10 @@ export class Exploration {
       c.seal.material.dispose();
       c.seal = null;
       const P = this.g.player;
-      if (c.pos.distanceTo(P.pos) < 60) this.g.hud.toast('<b>봉인 해제</b> · 보물상자가 나타났습니다', '#c3a8ff');
+      if (c.pos.distanceTo(P.pos) < 60) {
+        this.g.hud.toast('<b>봉인 해제</b> · 보물상자가 나타났습니다', '#c3a8ff');
+        this.g.sfx.unseal();
+      }
     }
   }
 
@@ -545,6 +550,7 @@ export class Exploration {
     this.beam(c.pos.clone().add(new V3(0, 0.5, 0)), T.glow, 5 + c.tier * 3, 0.38 + c.tier * 0.1, 1.4);
     setTimeout(() => this.g.combat.spawnGems(top, T.drops), 220);
     this.g.hud.toast(`<b>${T.name}</b> 획득`, T.glow);
+    this.g.sfx.chest(c.tier);
     this.g.cameraCtl.shake(0.05, 0.15);
     this.save();
   }
@@ -571,6 +577,7 @@ export class Exploration {
       this.vfx.ring(wp.pos.clone().add(new V3(0, 0.6, 0)), '#9ff0e0', 4, 0.8);
       this.vfx.burst(top, '#9ff0e0', 40, { speed: 6, size: 0.22, life: 0.9, gravity: 0, up: 0.4 });
       this.g.hud.showBanner(`${wp.name} · 순간이동 포인트 활성화`);
+      this.g.sfx.waypoint();
       this.g.hud.toast('<b>M</b> 지도에서 순간이동할 수 있습니다', '#5fe3c0');
     }
   }
@@ -585,6 +592,7 @@ export class Exploration {
     this.vfx.ring(st.center.clone().add(new V3(0, 1.6, 0)), '#9ff0e0', 9, 1.0);
     this.vfx.burst(st.orbPos, '#7ff5dc', 50, { speed: 7, size: 0.25, life: 1, gravity: 0, up: 0.5 });
     g.flashScreen('#cffff4', 0.25);
+    g.sfx.bless();
     const wp = this.S.waypoints.find((w) => w.statue);
     if (wp && !wp.active) this.activateWaypoint(wp);
     const before = this.blessing;

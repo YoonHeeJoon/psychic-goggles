@@ -83,6 +83,7 @@ void main(){
   vec3 d = normalize(vDir);
   float h = d.y;
   vec3 col = skyGradient(d);
+  float occ = 0.0; // alpha: how much the sky blocks sun shafts (clouds)
 
   // sun glow + disc
   float sd = max(dot(d, uSunDir), 0.0);
@@ -135,6 +136,7 @@ void main(){
     // silver lining towards the sun
     cCol += sunTint * pow(sd, 6.0) * 0.6 * (1.0 - density * 0.6) * (1.0 - uNight);
     col = mix(col, cCol, density * 0.96);
+    occ = density * 0.85;
 
     // ---- towering cumulus near horizon (azimuthal billboards)
     float az = atan(d.x, d.z);
@@ -147,8 +149,10 @@ void main(){
     vec3 tCol = mix(uCloudShade, uCloudLight, tl);
     tCol = mix(tCol, uFogColor2, 0.35);
     col = mix(col, tCol, tower * 0.92);
+    occ = max(occ, tower * 0.9);
   }
-  gl_FragColor = vec4(col, 1.0);
+  if (h < -0.02) occ = 1.0;
+  gl_FragColor = vec4(col, occ);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

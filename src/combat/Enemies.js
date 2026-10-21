@@ -762,6 +762,25 @@ const GROUPS = [
 ];
 
 export class EnemyManager {
+  // Far enemies drop their outline shells (sub-pixel there anyway) and stop
+  // casting shadows, which removes most of their draw calls.
+  lod(e, d) {
+    const k = (d > 36 ? 1 : 0) + (d > 55 ? 2 : 0);
+    if (e._lod === k) return;
+    e._lod = k;
+    if (!e._outlines) {
+      e._outlines = [];
+      e._casters = [];
+      e.model.root.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.material && o.material.uniforms && o.material.uniforms.uOutlineColor) e._outlines.push(o);
+        else if (o.castShadow) e._casters.push(o);
+      });
+    }
+    for (const o of e._outlines) o.visible = !(k & 1);
+    for (const o of e._casters) o.castShadow = !(k & 2);
+  }
+
   constructor(game) {
     this.game = game;
     this.scene = game.scene;
@@ -849,6 +868,7 @@ export class EnemyManager {
         continue;
       }
       if (e.alive) e.model.root.visible = true;
+      this.lod(e, d);
       e.update(dt, player);
     }
     // simple separation between enemies and from the player

@@ -2,6 +2,28 @@ import * as THREE from 'three';
 import { shared, VERT_HEAD, FRAG_HEAD, FRAG_TAIL, litUniforms } from './shaders.js';
 
 // ---------------------------------------------------------------------------
+// Face lighting: instead of N.L (which gives blotchy shadows on a small head)
+// the shadow edge sweeps across the face as the light circles the head, the
+// way hand-authored anime face shadow maps behave. hp is the head-space
+// position (unit radius), F/Rt the head forward/right axes in world space.
+// ---------------------------------------------------------------------------
+export const FACE_GLSL = /* glsl */ `
+float faceLit(vec3 hp, vec3 F, vec3 Rt, vec3 L){
+  vec2 lh = vec2(dot(L, Rt), dot(L, F));
+  float len = length(lh);
+  vec2 d = lh / max(len, 1e-4);
+  float ang = acos(clamp(d.y, -1.0, 1.0)) / 3.14159265;
+  float xs = hp.x * (d.x >= 0.0 ? 1.0 : -1.0);
+  float th = 0.5 + 0.5 * clamp(xs * 1.2, -1.0, 1.0);
+  // small wedge of shadow beside the nose on the far side
+  float nose = smoothstep(0.16, 0.02, abs(xs + 0.07)) * smoothstep(0.2, 0.05, abs(hp.y + 0.3));
+  th -= 0.14 * nose;
+  float lit = smoothstep(ang - 0.035, ang + 0.035, th);
+  return mix(1.0, lit, smoothstep(0.08, 0.35, len));
+}
+`;
+
+// ---------------------------------------------------------------------------
 // Anime toon material: two-tone ramp with tinted shadows, rim light, crisp
 // specular, optional root->tip colour gradient (hair) and texture.
 // ---------------------------------------------------------------------------
@@ -12,6 +34,19 @@ varying vec3 vNormalW;
 varying vec3 vWorldPos;
 varying float vGrad;
 varying vec2 vUv;
+#if defined(FACE) || defined(HAIR)
+  varying vec3 vHead;
+  varying vec3 vHF;
+  varying vec3 vHR;
+  varying vec3 vHU;
+#endif
+#ifdef HAIR
+  attribute vec3 aHead;
+#endif
+#ifdef FACE
+  uniform float uHeadR;
+  uniform vec3 uSunDir;
+#endif
 void main(){
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
   vec3 transformedNormal = normalMatrix * normal;
@@ -19,7 +54,25 @@ void main(){
   vWorldPos = worldPosition.xyz;
   vGrad = aGrad;
   vUv = uv;
+  #if defined(FACE) || defined(HAIR)
+    vHF = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
+    vHR = normalize(mat3(modelMatrix) * vec3(1.0, 0.0, 0.0));
+    vHU = normalize(mat3(modelMatrix) * vec3(0.0, 1.0, 0.0));
+  #endif
+  #ifdef HAIR
+    vHead = aHead;
+  #endif
+  #ifdef FACE
+    vHead = position / uHeadR;
+    // one shadow lookup for the whole face, taken just outside the head
+    // towards the light, so the face never gets blocky self-shadowing
+    vec4 realWorld = worldPosition;
+    worldPosition = vec4((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz + uSunDir * 0.32, 1.0);
+  #endif
   #include <shadowmap_vertex>
+  #ifdef FACE
+    worldPosition = realWorld;
+  #endif
   vec4 mvPosition = viewMatrix * worldPosition;
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
@@ -43,10 +96,18 @@ uniform float uFlash;
 uniform float uRampOffset;
 uniform sampler2D uMap;
 uniform float uUseMap;
+uniform float uRing;
 varying vec3 vNormalW;
 varying vec3 vWorldPos;
 varying float vGrad;
 varying vec2 vUv;
+#if defined(FACE) || defined(HAIR)
+  varying vec3 vHead;
+  varying vec3 vHF;
+  varying vec3 vHR;
+  varying vec3 vHU;
+#endif
+${FACE_GLSL}
 void main(){
   vec3 N = normalize(vNormalW);
   if (!gl_FrontFacing) N = -N;
@@ -56,6 +117,10 @@ void main(){
   float ndl = dot(N, uSunDir);
   float shadow = getShadowMask();
   float lit = smoothstep(uRampOffset - 0.04, uRampOffset + 0.06, ndl);
+  #ifdef FACE
+    float fw = smoothstep(0.05, 0.45, vHead.z / max(length(vHead), 1e-3));
+    lit = mix(lit, faceLit(vHead, normalize(vHF), normalize(vHR), uSunDir), fw);
+  #endif
   lit *= mix(1.0, shadow, 0.9);
   vec3 litCol = albedo * uCharLit;
   vec3 shdCol = albedo * uShadowTint * uCharShade;
@@ -66,6 +131,24 @@ void main(){
   vec3 H = normalize(uSunDir + V);
   float sp = smoothstep(0.90, 0.94, dot(N, H)) * lit;
   col += uCharLit * sp * uSpec;
+  #ifdef HAIR
+    // "angel ring": a jagged highlight band around the crown whose height
+    // follows the view (half-way between the eye and the head's up axis)
+    vec3 Fh = normalize(vHF), Rh = normalize(vHR), Uh = normalize(vHU);
+    vec3 Vh = vec3(dot(V, Rh), dot(V, Uh), dot(V, Fh));
+    vec3 Hh = normalize(Vh + vec3(0.0, 0.8, 0.0));
+    vec3 hp = vHead / max(length(vHead), 1e-3);
+    float az = atan(hp.x, hp.z);
+    float zig = abs(fract(az * 2.6 + vUv.x * 0.15) - 0.5) * 2.0;
+    // soft upper edge, jagged lower edge (strand tips)
+    float d = hp.y - Hh.y;
+    float zj = (zig - 0.5) * 0.09;
+    float ring = smoothstep(0.075, 0.015, d) * smoothstep(-0.085 + zj, -0.04 + zj, d);
+    ring *= smoothstep(0.15, 0.5, dot(N, V)) * step(0.0, dot(hp.xz, Vh.xz) + 0.35);
+    ring *= 0.35 + 0.65 * lit;
+    vec3 ringCol = mix(albedo * 1.8, vec3(1.0), 0.4) * uCharLit;
+    col = mix(col, ringCol, clamp(ring * uRing, 0.0, 1.0));
+  #endif
   col += albedo * uEmissive;
   col = mix(col, vec3(1.0, 0.95, 0.9), uFlash);
   gl_FragColor = vec4(col, uOpacity);
@@ -97,11 +180,17 @@ export function toonMaterial(opts = {}) {
     uRampOffset: { value: opts.ramp ?? 0.0 },
     uMap: { value: opts.map ?? null },
     uUseMap: { value: opts.map ? 1 : 0 },
+    uRing: { value: opts.ring ?? 0 },
+    uHeadR: { value: opts.headR ?? 1 },
   });
+  const defines = {};
+  if (opts.face) defines.FACE = '';
+  if (opts.ring) defines.HAIR = '';
   const mat = new THREE.ShaderMaterial({
     vertexShader: TOON_VERT,
     fragmentShader: TOON_FRAG,
     uniforms,
+    defines,
     lights: true,
     fog: true,
     side: opts.side ?? THREE.FrontSide,
@@ -172,39 +261,56 @@ export function outlineColorFor(hex) {
 // ---------------------------------------------------------------------------
 // Face decal: unlit-ish texture tinted by character lighting.
 // ---------------------------------------------------------------------------
-export function faceDecalMaterial(texture) {
+export function faceDecalMaterial(texture, headR = 1) {
   return new THREE.ShaderMaterial({
     vertexShader: /* glsl */ `
-      #include <common>
-      #include <fog_pars_vertex>
+      ${VERT_HEAD}
+      uniform float uHeadR;
+      uniform vec3 uSunDir;
       varying vec2 vUv;
+      varying vec3 vHead;
+      varying vec3 vHF;
+      varying vec3 vHR;
       void main(){
         vUv = uv;
+        vHead = position / uHeadR;
+        vHF = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
+        vHR = normalize(mat3(modelMatrix) * vec3(1.0, 0.0, 0.0));
+        vec3 transformedNormal = normalMatrix * normal;
+        vec4 worldPosition = vec4((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz + uSunDir * 0.32, 1.0);
+        #include <shadowmap_vertex>
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }`,
     fragmentShader: /* glsl */ `
-      #include <common>
-      #include <fog_pars_fragment>
+      ${FRAG_HEAD}
       uniform sampler2D uMap;
       uniform vec3 uCharLit;
       uniform vec3 uCharShade;
+      uniform vec3 uSunDir;
       varying vec2 vUv;
+      varying vec3 vHead;
+      varying vec3 vHF;
+      varying vec3 vHR;
+      ${FACE_GLSL}
       void main(){
         vec4 t = texture2D(uMap, vUv);
         if (t.a < 0.03) discard;
-        vec3 col = t.rgb * mix(uCharShade, uCharLit, 0.88);
+        float lit = faceLit(vHead, normalize(vHF), normalize(vHR), uSunDir);
+        lit *= mix(1.0, getShadowMask(), 0.9);
+        vec3 col = t.rgb * mix(uCharShade, uCharLit, mix(0.72, 1.0, lit));
         gl_FragColor = vec4(col, t.a);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-        #include <fog_fragment>
+        ${FRAG_TAIL}
       }`,
-    uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
+    uniforms: Object.assign(litUniforms(), {
       uMap: { value: texture },
       uCharLit: shared.uCharLit,
       uCharShade: shared.uCharShade,
+      uSunDir: shared.uSunDir,
+      uHeadR: { value: headR },
     }),
+    lights: true,
     transparent: true,
     depthWrite: false,
     polygonOffset: true,

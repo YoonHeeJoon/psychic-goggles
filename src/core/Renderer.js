@@ -4,12 +4,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GodRaysPass } from '../render/GodRays.js';
 
 export const PRESETS = {
-  low: { label: '낮음', pixelRatio: 0.75, shadowSize: 1024, shadowExtent: 45, grass: 45000, grassField: 56, terrainStep: 2, bloom: false, msaa: 0, trees: 0.5 },
-  medium: { label: '중간', pixelRatio: 1.0, shadowSize: 2048, shadowExtent: 55, grass: 110000, grassField: 70, terrainStep: 1, bloom: true, msaa: 2, trees: 0.8 },
-  high: { label: '높음', pixelRatio: 1.5, shadowSize: 2048, shadowExtent: 65, grass: 200000, grassField: 84, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0 },
-  ultra: { label: '최고', pixelRatio: 2.0, shadowSize: 4096, shadowExtent: 80, grass: 320000, grassField: 100, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0 },
+  low: { label: '낮음', pixelRatio: 0.75, shadowSize: 1024, shadowExtent: 45, grass: 45000, grassField: 56, terrainStep: 2, bloom: false, msaa: 0, trees: 0.5, rays: false },
+  medium: { label: '중간', pixelRatio: 1.0, shadowSize: 2048, shadowExtent: 55, grass: 110000, grassField: 70, terrainStep: 1, bloom: true, msaa: 2, trees: 0.8, rays: true },
+  high: { label: '높음', pixelRatio: 1.5, shadowSize: 2048, shadowExtent: 65, grass: 200000, grassField: 84, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0, rays: true },
+  ultra: { label: '최고', pixelRatio: 2.0, shadowSize: 4096, shadowExtent: 80, grass: 320000, grassField: 100, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0, rays: true },
 };
 
 export function pickQuality() {
@@ -64,6 +65,7 @@ const GradeShader = {
 export class Renderer {
   constructor(container, quality) {
     this.q = quality;
+    this.scale = 1; // dynamic resolution factor (1 = preset pixel ratio)
     const r = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));
     r.setSize(window.innerWidth, window.innerHeight);
@@ -89,6 +91,9 @@ export class Renderer {
     this.composer.setSize(window.innerWidth, window.innerHeight);
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
+    this.rays = new GodRaysPass();
+    this.rays.enabled = this.q.rays;
+    this.composer.addPass(this.rays);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.42, 0.55, 0.92);
     this.bloom.enabled = this.q.bloom;
     this.composer.addPass(this.bloom);
@@ -99,16 +104,31 @@ export class Renderer {
     window.addEventListener('resize', () => this.resize(camera));
   }
 
+  pixelRatio() {
+    return Math.min(window.devicePixelRatio || 1, this.q.pixelRatio) * this.scale;
+  }
+
+  // dynamic resolution: re-size the drawing buffer without touching settings
+  setScale(s, camera) {
+    if (Math.abs(s - this.scale) < 1e-3) return;
+    this.scale = s;
+    this.renderer.setPixelRatio(this.pixelRatio());
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.resize(camera);
+  }
+
   applyQuality(q, camera) {
     this.q = q;
+    this.scale = 1;
     const r = this.renderer;
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+    r.setPixelRatio(this.pixelRatio());
     this.composer.setPixelRatio(r.getPixelRatio());
     for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
       rt.samples = q.msaa;
       rt.dispose();
     }
     this.bloom.enabled = q.bloom;
+    this.rays.enabled = q.rays;
     this.resize(camera);
   }
 
@@ -119,6 +139,10 @@ export class Renderer {
     camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
+  }
+
+  updateRays(camera, sunDir, color, strength) {
+    if (this.rays.enabled) this.rays.update(camera, sunDir, color, strength);
   }
 
   render() {

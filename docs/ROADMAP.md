@@ -25,8 +25,14 @@ Chromium screenshots, then commits.
 - [x] Wind currents (updrafts) for gliding, full map (M)
 - [x] Climbable / walkable structures (houses, windmills, statue), saved progress
 
-## Iteration 4 — polish
-- [ ] Hair specular "angel ring", better face shading, idle variations
-- [ ] Ambient audio (wind, birds, footsteps, UI), music-free soundscape
-- [ ] Touch controls for mobile, performance pass (LOD, culling)
-- [ ] God rays / sun shafts, distant mountain impostors
+## Iteration 4 — polish ✅
+- [x] Hair specular "angel ring", better face shading, idle variations
+- [x] Ambient audio (wind, birds, footsteps, UI), music-free soundscape
+- [x] Touch controls for mobile, performance pass (LOD, culling)
+- [x] God rays / sun shafts, distant mountain impostors
+
+## Iteration 5 — world life & story
+- [ ] NPCs in the village (idle routines, speech bubbles), a short opening quest with dialogue UI
+- [ ] Cooking / gathering: pickable flowers, mushrooms and fruit with an inventory panel
+- [ ] Weather: rain showers with wet ground and rainbows, thunderstorms at night
+- [ ] Wildlife: birds that scatter, butterflies and fireflies, fish in the lake

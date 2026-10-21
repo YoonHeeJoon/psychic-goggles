@@ -182,6 +182,7 @@ export class Combat {
     const P = this.player;
     if (input.hit('ShiftLeft') || input.hit('ShiftRight')) {
       this.iframe = Math.max(this.iframe, 0.3);
+      if (P.state === 'ground') this.g.sfx.dash();
       if (this.action && this.action.t > this.action.s) this.endAction();
     }
     const atk = input.mouseHit(0);
@@ -266,6 +267,7 @@ export class Combat {
     c.skillCd = kit.skill.cd;
     this.autoAim(10);
     this.begin({ kind: 'skill', stance: true, ...kit.skill.def(this) });
+    this.g.sfx.skill(c.cfg.element);
   }
 
   startBurst() {
@@ -280,6 +282,7 @@ export class Combat {
     this.autoAim(12);
     this.g.cameraCtl.shake(0.15, 0.25);
     this.begin({ kind: 'burst', stance: true, ...kit.burst.def(this) });
+    this.g.sfx.burst(c.cfg.element);
     this.g.hud.flashCenter(kit.burst.name, 1200);
   }
 
@@ -313,6 +316,7 @@ export class Combat {
     a.t += dt;
     // root motion
     if (a.step && a.t >= a.w && a.t <= a.s + 0.04) P.forced = { x: Math.sin(P.yaw) * a.step, z: Math.cos(P.yaw) * a.step, t: 0.05 };
+    if (a.kind === 'attack' && prev < a.w && a.t >= a.w) this.g.sfx.swing(P.current.cfg.weapon, this.combo - 1);
     for (const h of a.hits) {
       if (prev < h && a.t >= h) this.meleeHit(a);
     }
@@ -415,6 +419,7 @@ export class Combat {
     dir.z += (Math.random() - 0.5) * 0.3;
     const mesh = this.vfx.orb(color, 0.22);
     mesh.position.copy(start);
+    this.g.sfx.cast(el);
     this.projectiles.push({ pos: start, vel: dir.multiplyScalar(13), el, mult: a.mult, target, life: 1.6, mesh, color });
   }
 
@@ -460,6 +465,7 @@ export class Combat {
     if (el !== 'phys') reaction = e.applyElement(el);
     if (reaction) {
       const R = REACTIONS[reaction.type];
+      this.g.sfx.reaction(reaction.type);
       this.ui.text(center.clone().setY(center.y + e.height * 0.7), R.name, R.color, { reaction: true });
       if (reaction.type === 'vaporize' || reaction.type === 'melt') {
         rmult = reaction.mult;
@@ -480,6 +486,7 @@ export class Combat {
       e.unfreeze();
       mult *= 1.6;
       this.ui.text(center.clone().setY(center.y + e.height * 0.9), REACTIONS.shatter.name, REACTIONS.shatter.color, { reaction: true });
+      this.g.sfx.reaction('shatter');
       this.vfx.burst(center, '#e8fbff', 30, { speed: 8, size: 0.25, life: 0.6 });
     }
     const crit = !h.noCrit && Math.random() < this.stats.critRate;
@@ -491,6 +498,7 @@ export class Combat {
     e.hit(dmg, knock, h.launch);
     this.ui.text(center.clone().setY(center.y + e.height * 0.45), String(dmg), ELEMENT_COLORS[el], { crit });
     if (!h.quiet) {
+      this.g.sfx.hit(el, crit, h.heavy);
       this.vfx.hitSpark(center, el === 'phys' ? '#fff3d6' : ELEMENT_COLORS[el]);
       this.hitStop = Math.max(this.hitStop, h.stop ?? (h.heavy ? 0.075 : 0.045));
     }
@@ -599,6 +607,7 @@ export class Combat {
     const c = P.current;
     dmg = Math.round(dmg * (0.9 + Math.random() * 0.2));
     c.hp = Math.max(0, c.hp - dmg);
+    this.g.sfx.hurt();
     this.ui.text(_a.set(P.pos.x, P.pos.y + 1.8, P.pos.z), String(dmg), '#ff6060', {});
     this.iframe = 0.45;
     this.g.flashScreen('#ff2a2a', 0.22);
@@ -686,6 +695,7 @@ export class Combat {
             c.energy = Math.min(c.maxEnergy, c.energy + gain);
           }
           this.vfx.sparkle(o.pos, ELEMENTS[o.el].color, 8, 0.5);
+          this.g.sfx.energy();
           this.vfx.removeObj(o.mesh);
           this.orbs.splice(i, 1);
           continue;
@@ -701,6 +711,7 @@ export class Combat {
     const col = e.selfEl ? ELEMENT_COLORS[e.selfEl] : '#ffd27a';
     this.vfx.burst(c, col, 40, { speed: 7, size: 0.3, life: 0.8, up: 0.6 });
     this.vfx.flash(c, '#ffffff', 1.2, 0.2);
+    this.g.sfx.enemyDeath();
     this.spawnEnergy(c, this.player.current.cfg.element, 1);
     this.spawnGems(c, 2 + Math.floor(Math.random() * 3));
   }
@@ -731,6 +742,7 @@ export class Combat {
           this.gemToast += 5;
           this.gemTimer = 0.6;
           this.vfx.sparkle(d.pos, '#9fe8ff', 6, 0.4);
+          this.g.sfx.gem();
           this.scene.remove(d.mesh);
           this.drops.splice(i, 1);
           continue;

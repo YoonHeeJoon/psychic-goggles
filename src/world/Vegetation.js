@@ -420,6 +420,63 @@ export class Vegetation {
     this.buildRocks();
     this.buildFlowers();
     this.buildGiantTree();
+    this.chunk();
+  }
+
+  // Split each island-wide InstancedMesh into spatial chunks so the camera
+  // and the shadow camera can frustum-cull them, and so small props can be
+  // dropped beyond a distance (fog hides them there anyway).
+  chunk() {
+    const out = [];
+    const m = new THREE.Matrix4(),
+      c = new THREE.Color(),
+      p = new THREE.Vector3();
+    const FAR = { flower: 150, bush: 260, rock: 460, tree: Infinity };
+    for (const mesh of this.meshes) {
+      const kind = mesh.userData.kind || 'tree';
+      const cell = kind === 'flower' || kind === 'bush' ? 64 : 128;
+      const buckets = new Map();
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        const key = Math.floor((p.x + HALF) / cell) + Math.floor((p.z + HALF) / cell) * 1024;
+        let b = buckets.get(key);
+        if (!b) buckets.set(key, (b = []));
+        b.push(i);
+      }
+      for (const idx of buckets.values()) {
+        const cm = new THREE.InstancedMesh(mesh.geometry, mesh.material, idx.length);
+        idx.forEach((src, j) => {
+          mesh.getMatrixAt(src, m);
+          cm.setMatrixAt(j, m);
+          if (mesh.instanceColor) {
+            mesh.getColorAt(src, c);
+            cm.setColorAt(j, c);
+          }
+        });
+        cm.castShadow = mesh.castShadow;
+        cm.receiveShadow = mesh.receiveShadow;
+        cm.customDepthMaterial = mesh.customDepthMaterial;
+        cm.renderOrder = mesh.renderOrder;
+        cm.computeBoundingSphere();
+        cm.userData.far = FAR[kind];
+        this.scene.add(cm);
+        out.push(cm);
+      }
+      this.scene.remove(mesh);
+    }
+    this.meshes = out;
+  }
+
+  // distance culling for small props
+  update(camera) {
+    const cp = camera.position;
+    for (const m of this.meshes) {
+      const far = m.userData.far;
+      if (far === Infinity) continue;
+      const s = m.boundingSphere;
+      m.visible = s.center.distanceTo(cp) < far + s.radius;
+    }
   }
 
   buildTreeTypes() {
@@ -618,6 +675,7 @@ export class Vegetation {
       mesh.receiveShadow = true;
       if (opts.depth) mesh.customDepthMaterial = opts.depth;
       mesh.computeBoundingSphere();
+      mesh.userData.kind = opts.kind || 'tree';
       this.scene.add(mesh);
       this.meshes.push(mesh);
       return mesh;
@@ -636,8 +694,8 @@ export class Vegetation {
     const pine = this.types[3];
     addInstanced(pine.trunk, this.trunkMat, pines);
     addInstanced(pine.cones, this.pineMat, pines, { tint: leafTint });
-    addInstanced(this.bush.core, this.coreMat, bushes, { tint: leafTint, cast: false });
-    addInstanced(this.bush.leaves, this.leafMat, bushes, { tint: leafTint, depth: this.leafDepth });
+    addInstanced(this.bush.core, this.coreMat, bushes, { tint: leafTint, cast: false, kind: 'bush' });
+    addInstanced(this.bush.leaves, this.leafMat, bushes, { tint: leafTint, depth: this.leafDepth, kind: 'bush' });
     this.treeCount = broad.reduce((a, b) => a + b.length, 0) + pines.length;
   }
 
@@ -709,6 +767,7 @@ export class Vegetation {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.computeBoundingSphere();
+      mesh.userData.kind = 'rock';
       this.scene.add(mesh);
       this.meshes.push(mesh);
     });
@@ -766,6 +825,7 @@ export class Vegetation {
     mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.computeBoundingSphere();
+    mesh.userData.kind = 'flower';
     this.scene.add(mesh);
     this.meshes.push(mesh);
     this.flowerItems = items;

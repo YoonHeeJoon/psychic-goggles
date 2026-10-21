@@ -79,6 +79,7 @@ export class Input {
   }
 
   requestLock() {
+    if (this.noLock) return;
     try {
       const r = this.dom.requestPointerLock && this.dom.requestPointerLock();
       if (r && r.catch) r.catch(() => (this.dragMode = true));
@@ -89,6 +90,16 @@ export class Input {
 
   exitLock() {
     if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  // virtual keys (touch buttons)
+  press(code) {
+    if (!this.enabled) return;
+    if (!this.keys.has(code)) this.pressed.add(code);
+    this.keys.add(code);
+  }
+  release(code) {
+    this.keys.delete(code);
   }
 
   down(code) {
