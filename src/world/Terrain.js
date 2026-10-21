@@ -23,6 +23,8 @@ export const LANDMARKS = {
   mountain: { x: 30, z: -300 },
   giantTree: { x: -150, z: -40 },
   statue: { x: 40, z: -10 },
+  village: { x: -185, z: 185, r: 46, h: 19 },
+  ruins: { x: -265, z: -95, r: 34, h: 17.5 },
 };
 
 const C = (hex) => new THREE.Color(hex);
@@ -48,6 +50,61 @@ export class Terrain {
     this.grass = new Float32Array(RES * RES);
     this.forest = new Float32Array(RES * RES);
     this.paths = [];
+    this.blockers = [];
+  }
+
+  // ---- structure footprints ------------------------------------------------
+  // Circles where vegetation must not grow (buildings, waypoints, chests...).
+  addBlocker(x, z, r) {
+    this.blockers.push({ x, z, r });
+  }
+  blocked(x, z, pad = 0) {
+    for (const b of this.blockers) {
+      const dx = x - b.x,
+        dz = z - b.z;
+      const r = b.r + pad;
+      if (dx * dx + dz * dz < r * r) return true;
+    }
+    return false;
+  }
+
+  // Paint ground under structures: areas are circles {x,z,r,soft} or rotated
+  // rects {x,z,hw,hd,rot,soft}; each can tint the colour and thin the grass.
+  paintAreas(areas) {
+    const tint = new THREE.Color();
+    for (const a of areas) {
+      const ext = (a.r ?? Math.hypot(a.hw, a.hd)) + (a.soft ?? 1);
+      const i0 = Math.max(0, Math.floor((a.x - ext + HALF) / CELL)),
+        i1 = Math.min(RES - 1, Math.ceil((a.x + ext + HALF) / CELL));
+      const j0 = Math.max(0, Math.floor((a.z - ext + HALF) / CELL)),
+        j1 = Math.min(RES - 1, Math.ceil((a.z + ext + HALF) / CELL));
+      if (a.color) tint.set(a.color);
+      const cs = Math.cos(a.rot || 0),
+        sn = Math.sin(a.rot || 0);
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) {
+          const x = -HALF + i * CELL - a.x,
+            z = -HALF + j * CELL - a.z;
+          let d;
+          if (a.r !== undefined) d = Math.hypot(x, z) - a.r;
+          else {
+            const lx = Math.abs(x * cs - z * sn) - a.hw,
+              lz = Math.abs(x * sn + z * cs) - a.hd;
+            d = Math.max(lx, lz);
+          }
+          const k = smoothstep(a.soft ?? 1, 0, d) * (a.amount ?? 1);
+          if (k <= 0) continue;
+          const idx = j * RES + i;
+          if (a.grass !== undefined) this.grass[idx] = lerp(this.grass[idx], this.grass[idx] * a.grass, k);
+          if (a.color) {
+            const n = this.n2.noise2(x * 0.3 + a.x, z * 0.3 + a.z) * 0.08;
+            this.colors[idx * 3] = lerp(this.colors[idx * 3], tint.r * (1 + n), k);
+            this.colors[idx * 3 + 1] = lerp(this.colors[idx * 3 + 1], tint.g * (1 + n), k);
+            this.colors[idx * 3 + 2] = lerp(this.colors[idx * 3 + 2], tint.b * (1 + n), k);
+          }
+        }
+    }
+    this.buildTextures();
   }
 
   // ---- generation -------------------------------------------------------
@@ -93,6 +150,13 @@ export class Terrain {
     // statue plateau
     const sd2 = Math.hypot(x - LANDMARKS.statue.x, z - LANDMARKS.statue.z);
     h = lerp(h, 14, smoothstep(28, 12, sd2));
+
+    // windmill village plateau and the forest ruins clearing
+    const vd = Math.hypot(x - LANDMARKS.village.x, z - LANDMARKS.village.z);
+    const vh = LANDMARKS.village.h + N.fbm(x * 0.02, z * 0.02, 2) * 0.5 + smoothstep(20, 46, vd) * 1.2;
+    h = lerp(h, vh, smoothstep(LANDMARKS.village.r + 30, LANDMARKS.village.r, vd));
+    const rd = Math.hypot(x - LANDMARKS.ruins.x, z - LANDMARKS.ruins.z);
+    h = lerp(h, LANDMARKS.ruins.h + N.fbm(x * 0.03, z * 0.03, 2) * 0.7, smoothstep(LANDMARKS.ruins.r + 22, LANDMARKS.ruins.r, rd));
 
     // spawn meadow: gentle rolling
     const sd = Math.hypot(x - SPAWN.x, z - SPAWN.z);
@@ -146,7 +210,21 @@ export class Terrain {
       [50, -90],
       [40, -170],
     ];
-    for (const p of [pts, pts2, pts3]) this.paths.push(this.makePathPolyline(p));
+    const V = LANDMARKS.village,
+      R = LANDMARKS.ruins,
+      G = LANDMARKS.giantTree;
+    const pts4 = [
+      [SPAWN.x, SPAWN.z],
+      [-95, 128],
+      [V.x + 30, V.z - 22],
+      [V.x, V.z],
+    ];
+    const pts5 = [
+      [G.x - 22, G.z - 8],
+      [-215, -70],
+      [R.x + 14, R.z + 6],
+    ];
+    for (const p of [pts, pts2, pts3, pts4, pts5]) this.paths.push(this.makePathPolyline(p));
   }
 
   makePathPolyline(ctrl) {

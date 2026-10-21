@@ -536,6 +536,7 @@ export class Vegetation {
     if (n.y < 0.82) return false;
     if (t.grassAt(x, z) < minGrass && h < 60) return false;
     if (t.pathDistance(x, z) < 4.5) return false;
+    if (t.blocked(x, z, 2.5)) return false;
     return true;
   }
 
@@ -684,6 +685,7 @@ export class Vegetation {
       const pr = 0.05 + steep * 0.7 + smoothstep(50, 110, h) * 0.2;
       if (rand() > pr) continue;
       if (t.pathDistance(x, z) < 3) continue;
+      if (t.blocked(x, z, 3)) continue;
       const big = rand() < 0.15;
       const s = big ? 1.8 + rand() * 2.2 : 0.3 + rand() * 0.9;
       buckets[Math.floor(rand() * 4)].push({ x, y: h - s * 0.15, z, s, rot: rand() * Math.PI * 2, n });

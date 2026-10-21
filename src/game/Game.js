@@ -12,6 +12,9 @@ import { CameraController } from './CameraController.js';
 import { HUD, Menus } from '../ui/HUD.js';
 import { ELEMENTS } from '../character/characters.js';
 import { Combat } from '../combat/Combat.js';
+import { Structures } from '../world/Structures.js';
+import { Exploration } from './Exploration.js';
+import { WorldMap } from '../ui/WorldMap.js';
 import { damp } from '../core/noise.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -45,6 +48,12 @@ export class Game {
     await nextFrame();
     this.terrain = new Terrain(1337);
     this.terrain.generate();
+    loader.set(0.2, '마을과 유적을 세우는 중...');
+    await nextFrame();
+    this.structures = new Structures(this.scene, this.terrain);
+    this.structures.build();
+    this.ground = this.structures.ground;
+    this.explore = new Exploration(this);
     this.scene.add(this.terrain.buildMesh(q.terrainStep));
 
     loader.set(0.35, '하늘과 바다를 칠하는 중...');
@@ -64,6 +73,7 @@ export class Game {
     this.cameraCtl = new CameraController(this.camera, this.terrain);
     this.cameraCtl.yaw = 0;
     this.combat = new Combat(this);
+    this.explore.build();
 
     this.rendererW.setup(this.scene, this.camera);
     this.hud = new HUD(this.container);
@@ -71,6 +81,10 @@ export class Game {
     this.renderPortraits();
     this.hud.setParty(this.player.party, this.player.active);
     this.menus = new Menus(this.container, this);
+    this.worldMap = new WorldMap(this.container, this);
+    this.tpFade = document.createElement('div');
+    this.tpFade.className = 'tp-fade';
+    this.container.appendChild(this.tpFade);
 
     loader.set(0.9, '셰이더 준비 중...');
     await nextFrame();
@@ -93,7 +107,13 @@ export class Game {
         else if (this.state === 'paused') this.resume();
       }
       if (e.code === 'KeyH' && this.state === 'playing') this.hud.help.classList.toggle('hidden');
+      if (e.code === 'KeyM') {
+        if (this.state === 'playing') this.openMap();
+        else if (this.state === 'map') this.closeMap();
+      }
+      if (e.code === 'Escape' && this.state === 'map') this.closeMap();
     });
+    window.addEventListener('beforeunload', () => this.explore.save());
     this.loop();
     window.__game = this;
   }
@@ -187,9 +207,61 @@ export class Game {
     this.clock.getDelta();
   }
 
+  openMap(focus) {
+    if (this.state !== 'playing') return;
+    this.state = 'map';
+    this.input.enabled = false;
+    this.input.keys.clear();
+    this.input.exitLock();
+    this.hud.setPrompt('');
+    this.explore.promptText = '';
+    this.worldMap.open(focus);
+  }
+
+  closeMap() {
+    if (this.state !== 'map') return;
+    this.worldMap.close();
+    this.state = 'playing';
+    this.input.enabled = true;
+    this.input.requestLock();
+    this.clock.getDelta();
+  }
+
+  // Fade out, move to a waypoint, fade back in.
+  teleport(wp) {
+    if (this.tpBusy) return;
+    this.tpBusy = true;
+    if (this.state === 'map') this.closeMap();
+    const P = this.player;
+    P.locked = true;
+    this.tpFade.classList.add('on');
+    setTimeout(() => {
+      const a = Math.atan2(wp.x - LANDMARKS.statue.x, wp.z - LANDMARKS.statue.z) + 0.6;
+      const x = wp.x + Math.sin(a) * 2.8,
+        z = wp.z + Math.cos(a) * 2.8;
+      P.pos.set(x, this.ground.heightAt(x, z), z);
+      P.vel.set(0, 0, 0);
+      P.state = 'ground';
+      P.yaw = a;
+      P.lastSafe.copy(P.pos);
+      P.fallStartY = P.pos.y;
+      this.cameraCtl.yaw = a + Math.PI;
+      this.cameraCtl.pitch = 0.2;
+      this.cameraCtl.initialized = false;
+      this.hud.region = '';
+      setTimeout(() => {
+        this.tpFade.classList.remove('on');
+        P.locked = false;
+        this.tpBusy = false;
+      }, 350);
+    }, 520);
+  }
+
   regionAt(x, z) {
     const d = (p) => Math.hypot(x - p.x, z - p.z);
     const h = this.terrain.heightAt(x, z);
+    if (d(LANDMARKS.village) < 70) return '풍차 마을';
+    if (d(LANDMARKS.ruins) < 45) return '잊힌 유적';
     if (d(LANDMARKS.giantTree) < 75) return '천년나무 언덕';
     if (d(LANDMARKS.lake) < 95) return '거울 호수';
     if (d(LANDMARKS.mountain) < 210 || h > 75) return '별빛 설산';
@@ -276,11 +348,16 @@ export class Game {
       C.hitStop = Math.max(0, C.hitStop - dt);
       const gdt = stop ? dt * 0.06 : dt;
       C.update(gdt, this.input);
+      this.explore.preUpdate(gdt);
       P.update(gdt, this.input, this.cameraCtl.yaw);
       this.cameraCtl.update(dt, this.input, P);
       this.handleEvents();
+      this.explore.update(gdt, this.input);
       C.lateUpdate(gdt, dt);
+    } else if (this.state === 'map') {
+      this.combat.lateUpdate(0, dt);
     }
+    this.structures.update(dt, shared.uWindStrength.value);
     const gu = this.rendererW.grade.uniforms;
     gu.uFlash.value = Math.max(0, gu.uFlash.value - dt * 2.2);
     if (this.state !== 'paused') this.env.update(dt, P.pos);
@@ -315,6 +392,7 @@ export class Game {
       for (const e of this.combat.enemies.list) {
         if (e.alive && Math.abs(e.pos.x - P.pos.x) < 60 && Math.abs(e.pos.z - P.pos.z) < 60) markers.push({ x: e.pos.x, z: e.pos.z, color: '#ff5a4a', r: 3 });
       }
+      this.explore.minimapMarkers(P, markers);
       this.hud.drawMinimap(P, this.cameraCtl.yaw, markers);
     }
     this.fpsAcc += dt;

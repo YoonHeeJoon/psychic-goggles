@@ -19,10 +19,11 @@ Chromium screenshots, then commits.
 - [x] Elemental reactions (vaporize, melt, overload, freeze, charged, superconduct, swirl, shatter)
 - [x] Damage numbers, hit-stop, camera shake, plunge attack, dash i-frames, party down/revive
 
-## Iteration 3 — exploration content
-- [ ] Teleport waypoints, guardian statue, ruins, windmill village
-- [ ] Collectibles (wind orbs), treasure chests, gem currency
-- [ ] Wind currents (updrafts) for gliding, full map (M)
+## Iteration 3 — exploration content ✅
+- [x] Teleport waypoints, guardian statue, ruins, windmill village
+- [x] Collectibles (wind orbs), treasure chests, gem currency
+- [x] Wind currents (updrafts) for gliding, full map (M)
+- [x] Climbable / walkable structures (houses, windmills, statue), saved progress
 
 ## Iteration 4 — polish
 - [ ] Hair specular "angel ring", better face shading, idle variations

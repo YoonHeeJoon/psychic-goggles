@@ -186,7 +186,7 @@ export class Combat {
     }
     const atk = input.mouseHit(0);
     if (atk) {
-      const gh = this.g.terrain.heightAt(P.pos.x, P.pos.z);
+      const gh = this.g.ground.heightAt(P.pos.x, P.pos.z);
       if (this.action && (this.action.kind === 'attack')) this.queued = true;
       else if (!this.action) {
         if (P.state === 'glide' || (P.state === 'air' && P.pos.y - gh > 2.2)) this.startPlunge();
@@ -670,7 +670,7 @@ export class Combat {
       if (o.t < 0.65) {
         o.vel.y -= 12 * dt;
         o.pos.addScaledVector(o.vel, dt);
-        const gh = this.g.terrain.heightAt(o.pos.x, o.pos.z) + 0.3;
+        const gh = this.g.ground.heightAt(o.pos.x, o.pos.z) + 0.3;
         if (o.pos.y < gh) {
           o.pos.y = gh;
           o.vel.y *= -0.4;
@@ -702,12 +702,17 @@ export class Combat {
     this.vfx.burst(c, col, 40, { speed: 7, size: 0.3, life: 0.8, up: 0.6 });
     this.vfx.flash(c, '#ffffff', 1.2, 0.2);
     this.spawnEnergy(c, this.player.current.cfg.element, 1);
-    const n = 2 + Math.floor(Math.random() * 3);
+    this.spawnGems(c, 2 + Math.floor(Math.random() * 3));
+  }
+
+  // star-gem pickups that pop out and then fly to the player (+5 each)
+  spawnGems(c, n) {
     for (let i = 0; i < n; i++) {
       const mesh = new THREE.Mesh(this.gemGeo || (this.gemGeo = new THREE.OctahedronGeometry(0.14, 0)), this.gemMat || (this.gemMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#8fe6ff').multiplyScalar(1.6), fog: false })));
       mesh.position.copy(c);
       this.scene.add(mesh);
-      this.drops.push({ mesh, pos: c.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * 5, 5 + Math.random() * 3, (Math.random() - 0.5) * 5), t: 0, collecting: false });
+      const sp = 3 + Math.min(n, 12) * 0.25;
+      this.drops.push({ mesh, pos: c.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * sp, 5 + Math.random() * 3, (Math.random() - 0.5) * sp), t: 0, collecting: false });
     }
   }
 
@@ -736,7 +741,7 @@ export class Combat {
         d.pos.addScaledVector(d.vel, dt);
         d.vel.x *= Math.exp(-2 * dt);
         d.vel.z *= Math.exp(-2 * dt);
-        const gh = this.g.terrain.heightAt(d.pos.x, d.pos.z) + 0.25;
+        const gh = (this.g.ground || this.g.terrain).heightAt(d.pos.x, d.pos.z) + 0.25;
         if (d.pos.y < gh) {
           d.pos.y = gh;
           d.vel.y = Math.abs(d.vel.y) * 0.35;

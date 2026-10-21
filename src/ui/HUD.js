@@ -63,6 +63,7 @@ export class HUD {
       'top-right',
       `<div class="pill time">${elementIcon('clock', '#fff', 16)}<span class="t">09:00</span></div>
        <div class="pill gems">${elementIcon('gem', '#9fe8ff', 16)}<span class="g">0</span></div>
+       <div class="pill keyhint"><b>M</b> 지도</div>
        <div class="pill keyhint"><b>Esc</b> 메뉴</div>`
     );
     L.appendChild(this.topRight);
@@ -113,7 +114,8 @@ export class HUD {
       'div',
       'help',
       `<div><b>좌클릭</b> 공격 · <b>E</b> 원소 스킬 · <b>Q</b> 원소 폭발 · <b>공중 좌클릭</b> 낙하 공격</div>
-       <div><b>WASD</b> 이동 · <b>Shift</b> 질주(회피) · <b>Space</b> 점프/활공 · <b>1-4</b> 교체 · <b>H</b> 도움말</div>`
+       <div><b>WASD</b> 이동 · <b>Shift</b> 질주(회피) · <b>Space</b> 점프/활공 · <b>1-4</b> 교체 · <b>H</b> 도움말</div>
+       <div><b>F</b> 상호작용 · <b>M</b> 지도 · 상승 기류에 들어가면 하늘로 떠오릅니다</div>`
     );
     L.appendChild(this.help);
 
@@ -292,13 +294,60 @@ export class HUD {
     g.drawImage(this.mapImage, 0, 0);
     g.setTransform(1, 0, 0, 1, 0, 0);
     // markers
+    const now = performance.now() / 1000;
     for (const m of markers) {
       const x = W / 2 + (m.x - player.pos.x) * zoom;
       const y = W / 2 + (m.z - player.pos.z) * zoom;
-      g.fillStyle = m.color || '#ffd56a';
-      g.beginPath();
-      g.arc(x, y, m.r || 4, 0, Math.PI * 2);
-      g.fill();
+      if (x < -12 || x > W + 12 || y < -12 || y > W + 12) continue;
+      if (m.shape === 'wp') {
+        g.fillStyle = 'rgba(20,30,40,0.8)';
+        g.strokeStyle = m.active ? '#f3d58a' : '#9aa3ad';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(x, y, 7, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillStyle = m.active ? '#8ff7e0' : '#7d8894';
+        g.beginPath();
+        g.moveTo(x, y - 5);
+        g.lineTo(x + 3, y);
+        g.lineTo(x, y + 5);
+        g.lineTo(x - 3, y);
+        g.closePath();
+        g.fill();
+      } else if (m.shape === 'statue') {
+        g.fillStyle = 'rgba(20,30,40,0.8)';
+        g.strokeStyle = '#f3d58a';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(x, y, 8, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#9ff0e0';
+        for (const s of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(x + s, y + 1.5);
+          g.quadraticCurveTo(x + s * 6, y - 1.5, x + s * 5.5, y - 5.5);
+          g.quadraticCurveTo(x + s * 3.5, y - 2, x + s, y - 1.5);
+          g.closePath();
+          g.fill();
+        }
+        g.beginPath();
+        g.arc(x, y + 2.5, 1.8, 0, Math.PI * 2);
+        g.fill();
+      } else {
+        const r = (m.r || 4) * (m.pulse ? 1 + 0.35 * Math.sin(now * 5) : 1);
+        if (m.pulse) {
+          g.fillStyle = 'rgba(127,245,220,0.25)';
+          g.beginPath();
+          g.arc(x, y, r * 2.2, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.fillStyle = m.color || '#ffd56a';
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+      }
     }
     // view cone
     g.translate(W / 2, W / 2);
@@ -351,6 +400,7 @@ export class Menus {
         <div class="controls">
           <div><b>WASD</b> 이동</div><div><b>Shift</b> 질주 · 회피</div><div><b>Space</b> 점프 · 공중에서 활공</div><div><b>절벽으로 이동</b> 등반</div>
           <div><b>좌클릭</b> 일반 공격</div><div><b>E</b> 원소 스킬</div><div><b>Q</b> 원소 폭발</div><div><b>1-4</b> 캐릭터 교체</div>
+          <div><b>F</b> 상호작용</div><div><b>M</b> 지도 · 순간이동</div><div><b>상승 기류</b> 하늘로 비상</div><div><b>H</b> 도움말</div>
         </div>
       </div>
       <div class="title-foot">Three.js로 만든 오리지널 오픈월드 · 모든 캐릭터와 지역은 창작물입니다</div>`

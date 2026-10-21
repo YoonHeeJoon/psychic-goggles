@@ -18,8 +18,10 @@ const _n = new THREE.Vector3();
 export class Player {
   constructor(game) {
     this.game = game;
-    this.terrain = game.terrain;
+    // terrain + walkable structures (same API as Terrain)
+    this.terrain = game.ground || game.terrain;
     this.colliders = game.vegetation.colliders;
+    this.updraft = 0;
     this.group = new THREE.Group();
     game.scene.add(this.group);
 
@@ -196,6 +198,8 @@ export class Player {
 
     const nx = this.pos.x + this.vel.x * dt;
     const nz = this.pos.z + this.vel.z * dt;
+    const ox = this.pos.x,
+      oz = this.pos.z;
     const n = this.terrain.normalAt(nx, nz, _n);
     if (n.y < CLIMB_NY && this.terrain.heightAt(nx, nz) > this.pos.y + 0.15) {
       const hl = Math.hypot(n.x, n.z) || 1;
@@ -214,6 +218,7 @@ export class Player {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     this.colliders.resolve(this.pos, 0.32);
+    this.blockSolid(ox, oz, 0.55);
     this.speed = Math.hypot(this.vel.x, this.vel.z);
 
     const gh = this.groundHeight(this.pos.x, this.pos.z);
@@ -240,6 +245,8 @@ export class Player {
   updateAir(dt, input, wish, moving, wishYaw) {
     this.sprinting = false;
     this.vel.y -= GRAVITY * dt;
+    const ox = this.pos.x,
+      oz = this.pos.z;
     if (moving) {
       this.yaw = dampAngle(this.yaw, wishYaw, 5, dt);
       this.vel.x = damp(this.vel.x, wish.x * Math.max(5.5, Math.hypot(this.vel.x, this.vel.z)), 2.5, dt);
@@ -247,6 +254,7 @@ export class Player {
     }
     this.pos.addScaledVector(this.vel, dt);
     this.colliders.resolve(this.pos, 0.32);
+    this.blockSolid(ox, oz, 0.6);
     this.speed = Math.hypot(this.vel.x, this.vel.z);
     const gh = this.groundHeight(this.pos.x, this.pos.z);
 
@@ -268,10 +276,24 @@ export class Player {
     }
     // wall in front -> climb
     if (moving && !this.locked && this.tryWallAhead(wish)) return;
-    // open glider
-    if (!this.locked && input.hit('Space') && this.vel.y < 1 && this.pos.y - gh > 2.2 && this.stamina > 1 && !this.exhausted) {
+    // open glider (wind currents open it automatically)
+    this.glideCancel = Math.max(0, (this.glideCancel || 0) - dt);
+    const canGlide = this.stamina > 1 && !this.exhausted && !this.locked;
+    const h = this.pos.y - gh;
+    if (canGlide && ((input.hit('Space') && this.vel.y < 1 && h > 2.2) || (this.updraft > 0 && h > 0.9 && this.glideCancel <= 0))) {
       this.state = 'glide';
       this.emit('glide');
+    }
+  }
+
+  // Structures have vertical walls: never step up onto one, slide down it.
+  blockSolid(ox, oz, step) {
+    if (!this.terrain.solidAt) return;
+    if (this.terrain.solidAt(this.pos.x, this.pos.z) > this.pos.y + step) {
+      this.pos.x = ox;
+      this.pos.z = oz;
+      this.vel.x *= 0.2;
+      this.vel.z *= 0.2;
     }
   }
 
@@ -293,18 +315,24 @@ export class Player {
   updateGlide(dt, input, wish, moving, wishYaw) {
     this.sprinting = false;
     if (moving) this.yaw = dampAngle(this.yaw, wishYaw, 2.6, dt);
-    const sp = moving ? 8.0 : 6.0;
+    // wind currents slow the glide so you can ride them upward
+    const sp = this.updraft > 0 ? (moving ? 5.0 : 1.0) : moving ? 8.0 : 6.0;
     this.vel.x = damp(this.vel.x, Math.sin(this.yaw) * sp, 2.2, dt);
     this.vel.z = damp(this.vel.z, Math.cos(this.yaw) * sp, 2.2, dt);
-    this.vel.y = damp(this.vel.y, -2.1, 5, dt);
+    if (this.updraft > 0) this.vel.y = damp(this.vel.y, this.updraft, 2.2, dt);
+    else this.vel.y = damp(this.vel.y, -2.1, 5, dt);
+    const ox = this.pos.x,
+      oz = this.pos.z;
     this.pos.addScaledVector(this.vel, dt);
     this.colliders.resolve(this.pos, 0.4);
+    this.blockSolid(ox, oz, 0.6);
     this.speed = Math.hypot(this.vel.x, this.vel.z);
     this.useStamina(5.5 * dt);
     this.fallStartY = this.pos.y;
     const gh = this.groundHeight(this.pos.x, this.pos.z);
     if (input.hit('Space') || this.stamina <= 0) {
       this.state = 'air';
+      this.glideCancel = 0.8;
       return;
     }
     if (this.pos.y < SWIM_Y + 0.3 && SEA_LEVEL - gh > SWIM_DEPTH) {
