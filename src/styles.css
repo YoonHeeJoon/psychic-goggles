@@ -283,3 +283,117 @@ html, body {
   .title-inner { margin-top: 0; transform: scale(.74); }
   .title-foot { display: none; }
 }
+
+/* ------------------------------------------------------------ dialogue */
+.dialogue { position: fixed; inset: 0; z-index: 30; cursor: pointer; }
+.dialogue.hidden { display: none; }
+.dlg-shade { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; background: linear-gradient(0deg, rgba(6,8,16,.82), rgba(6,8,16,.5) 55%, rgba(6,8,16,0)); pointer-events: none; }
+.dlg-box { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); width: min(820px, 88vw); text-align: center; }
+.dlg-name { display: flex; justify-content: center; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.dlg-name .n { font-size: 19px; font-weight: 700; color: var(--gold); letter-spacing: .08em; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+.dlg-name .t { font-size: 12px; opacity: .7; letter-spacing: .1em; }
+.dlg-name .n:empty + .t:empty { display: none; }
+.dialogue.narration .dlg-text { font-style: italic; color: #e6f6ff; }
+.dlg-text { min-height: 56px; font-size: 18px; line-height: 1.7; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.7); letter-spacing: .02em; }
+.dlg-next { margin-top: 6px; font-size: 13px; color: var(--gold); opacity: 0; }
+.dlg-next.show { opacity: 1; animation: dlgnext 1s ease-in-out infinite; }
+@keyframes dlgnext { 50% { transform: translateY(4px); } }
+.dlg-options { position: absolute; right: max(8vw, 24px); top: 42%; display: flex; flex-direction: column; gap: 10px; cursor: default; }
+.dlg-opt { display: flex; align-items: center; gap: 12px; min-width: min(360px, 70vw); padding: 11px 22px 11px 14px; border-radius: 30px; border: 1px solid rgba(255,255,255,.18);
+  background: linear-gradient(90deg, rgba(20,24,40,.88), rgba(20,24,40,.6)); color: #fff; font: 500 15px var(--font); text-align: left; cursor: pointer; animation: tin .25s ease both; }
+.dlg-opt:hover, .dlg-opt:focus-visible { background: linear-gradient(90deg, rgba(255,240,200,.95), rgba(236,220,178,.9)); color: #3a3020; outline: none; }
+.dlg-opt .ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.12); color: var(--gold); flex: none; }
+.dlg-opt.quest .ic { background: rgba(255,214,106,.25); }
+.dlg-opt:hover .ic { color: #8a6a20; }
+.hud.cine { opacity: 0; transition: opacity .3s; }
+.hud { transition: opacity .3s; }
+
+/* ------------------------------------------------------------ villagers */
+.npc-ui { position: fixed; inset: 0; pointer-events: none; z-index: 9; overflow: hidden; }
+.npc-tag { position: absolute; left: 0; top: 0; display: none; text-align: center; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.npc-tag .nm { display: block; font-size: 13px; font-weight: 700; color: #fff; }
+.npc-tag .tt { display: block; font-size: 10.5px; color: #f6e2a8; opacity: .9; }
+.npc-bubble { position: absolute; left: 0; top: 0; display: none; max-width: 220px; padding: 6px 12px; border-radius: 12px; background: rgba(255,252,244,.94); color: #3a3020;
+  font-size: 12.5px; white-space: nowrap; text-shadow: none; box-shadow: 0 2px 10px rgba(0,0,0,.25); animation: tin .3s ease; }
+.npc-bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(255,252,244,.94); }
+
+/* ------------------------------------------------------------ quest */
+.quest-track { position: absolute; left: 24px; top: 262px; width: 230px; pointer-events: auto; cursor: pointer; padding: 8px 10px 8px 12px; border-left: 2px solid rgba(255,214,106,.8);
+  background: linear-gradient(90deg, rgba(15,18,32,.55), rgba(15,18,32,0)); }
+.quest-track.hidden { display: none; }
+.quest-track.flash { animation: qflash 1.2s ease; }
+@keyframes qflash { 0% { background: linear-gradient(90deg, rgba(255,214,106,.55), rgba(15,18,32,0)); } }
+.qt-title { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--gold); }
+.qt-ic { font-size: 12px; animation: qready 2s infinite; }
+.qt-obj { margin-top: 4px; font-size: 12.5px; line-height: 1.5; }
+.qt-dist { font-size: 11px; opacity: .7; margin-top: 2px; }
+.q-marker { position: absolute; left: 0; top: 0; text-align: center; pointer-events: none; }
+.q-marker.hidden { display: none; }
+.qm-ic { width: 30px; height: 30px; margin: 0 auto; display: grid; place-items: center; font-size: 22px; color: #ffd56a; text-shadow: 0 0 10px rgba(255,200,90,.9), 0 0 2px #000; animation: qbob 1.6s ease-in-out infinite; }
+@keyframes qbob { 50% { transform: translateY(-4px); } }
+.qm-d { font-size: 11.5px; font-weight: 700; }
+.q-marker.edge .qm-ic { opacity: .85; transform: scale(.85); animation: none; }
+
+/* ------------------------------------------------------------ bag & cooking */
+.panel-wrap { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; background: rgba(8,12,24,.45); backdrop-filter: blur(3px); }
+.panel-wrap.hidden { display: none; }
+.panel { width: min(860px, 94vw); max-height: 86vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(38,44,68,.97), rgba(22,26,42,.97)); box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 24px 70px rgba(0,0,0,.55); animation: tin .25s ease; }
+.pn-head { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.pn-title { font-family: 'Noto Serif KR', serif; font-size: 20px; font-weight: 600; letter-spacing: .3em; color: var(--gold); }
+.pn-sub { font-size: 12px; opacity: .7; }
+.pn-tabs { display: flex; gap: 6px; }
+.pn-tabs button { font: 500 13px var(--font); color: #fff; padding: 6px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.05); cursor: pointer; }
+.pn-tabs button.on { background: rgba(255,240,200,.92); color: #3a3020; border-color: #fff; }
+.pn-close { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.06); color: #fff; font-size: 15px; cursor: pointer; }
+.pn-body { display: grid; grid-template-columns: 1fr 280px; min-height: 340px; overflow: hidden; }
+.pn-grid { padding: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 12px; align-content: start; overflow-y: auto; }
+.pn-empty { grid-column: 1 / -1; padding: 40px 10px; text-align: center; font-size: 13.5px; line-height: 1.8; opacity: .7; }
+.slot { position: relative; aspect-ratio: 1; border-radius: 12px; border: 2px solid transparent; cursor: pointer; padding: 6px;
+  background: linear-gradient(160deg, #6b7fa8, #3f4c6e); box-shadow: inset 0 -16px 18px rgba(0,0,0,.18); }
+.slot.food { background: linear-gradient(160deg, #b08a4e, #6e5232); }
+.slot img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.slot .cnt { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 0; font-size: 12px; font-weight: 700; background: rgba(240,232,214,.92); color: #3a3020; border-radius: 0 0 10px 10px; text-shadow: none; }
+.slot.on { border-color: #fff3c8; box-shadow: 0 0 0 2px rgba(255,214,106,.6), 0 0 18px rgba(255,214,106,.4); }
+.pn-detail { padding: 22px; border-left: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.15); display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.pn-detail .big { width: 110px; height: 110px; align-self: center; filter: drop-shadow(0 4px 8px rgba(0,0,0,.4)); }
+.pn-detail .nm { font-size: 18px; font-weight: 700; color: var(--gold); }
+.pn-detail .kd { font-size: 12px; opacity: .65; }
+.pn-detail .fx { font-size: 13px; color: #b8ffb0; }
+.pn-detail .ds { font-size: 13px; line-height: 1.7; opacity: .88; }
+.pn-detail .use, .r-cook { margin-top: auto; padding: 10px; border-radius: 30px; border: 0; font: 600 14px var(--font); letter-spacing: .1em; color: #3a3020; background: linear-gradient(180deg, #fffaf0, #ecdcb2); cursor: pointer; }
+.recipes { padding: 16px 18px 6px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.recipe { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+.recipe.locked { opacity: .78; }
+.recipe .out { width: 64px; height: 64px; border-radius: 10px; padding: 4px; background: linear-gradient(160deg, #b08a4e, #6e5232); }
+.r-info { flex: 1; min-width: 0; }
+.r-name { font-size: 15px; font-weight: 700; color: var(--gold); }
+.r-name small { font-size: 11px; font-weight: 400; color: #fff; opacity: .6; margin-left: 6px; }
+.r-fx { font-size: 12px; color: #b8ffb0; margin: 2px 0 6px; }
+.r-needs { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; }
+.need { display: inline-flex; align-items: center; gap: 4px; }
+.need img { width: 22px; height: 22px; }
+.need.short b { color: #ff8a7a; }
+.r-cook { margin: 0; padding: 9px 22px; flex: none; }
+.r-cook:disabled { filter: grayscale(1); opacity: .45; cursor: default; }
+.cook-bar { height: 4px; margin: 6px 18px 14px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.cook-fill { width: 0; height: 100%; background: linear-gradient(90deg, #ffd36a, #ff9a4a); }
+.cook-bar.run .cook-fill { width: 100%; transition: width .9s linear; }
+.buffs { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); display: flex; gap: 8px; }
+.buff { display: flex; align-items: center; gap: 4px; padding: 3px 10px 3px 4px; border-radius: 14px; background: var(--panel); font-size: 11.5px; }
+.buff img { width: 22px; height: 22px; }
+.buff b { color: var(--gold); }
+@media (max-width: 760px) {
+  .pn-body { grid-template-columns: 1fr; }
+  .pn-detail { border-left: 0; border-top: 1px solid rgba(255,255,255,.08); }
+  .quest-track { top: 160px; left: 12px; width: 170px; }
+  .dlg-options { right: 12px; left: 12px; top: auto; bottom: 34%; }
+  .dlg-opt { min-width: 0; }
+}
+@media (max-height: 520px) {
+  .touch-mode .quest-track { top: 156px; left: 12px; width: 170px; padding: 5px 8px; }
+  .dlg-box { bottom: 4%; }
+  .dlg-options { top: 18%; }
+  .panel { max-height: 94vh; }
+  .pn-body { min-height: 0; }
+}

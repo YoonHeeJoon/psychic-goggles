@@ -23,6 +23,7 @@ export class Sound {
     this.cricketT = 0.5;
     this.last = {};
     this.gemChain = 0;
+    this.rainAmt = 0;
   }
 
   // Must be called from a user gesture (browsers keep audio locked until then).
@@ -256,7 +257,8 @@ export class Sound {
       leaves: this.layer(this.white, 0.85, [['highpass', 2600, 0.5], ['lowpass', 8000, 0.5]]),
       surf: this.layer(this.brown, 1, [['lowpass', 520, 0.7]]),
       hiss: this.layer(this.pink, 1, [['bandpass', 1300, 0.4]]),
-      fire: null,
+      rain: this.layer(this.white, 1, [['highpass', 900, 0.5], ['lowpass', 6500, 0.5]]),
+      rainLow: this.layer(this.pink, 0.8, [['lowpass', 650, 0.6]]),
     };
   }
 
@@ -280,21 +282,37 @@ export class Sound {
     const wave = 0.55 + 0.45 * Math.sin(this.t * 0.75) * Math.sin(this.t * 0.31 + 2.0);
     set(A.surf.g.gain, on * s.water * 0.28 * wave, 0.4);
     set(A.hiss.g.gain, on * s.water * 0.05 * wave * wave, 0.4);
+    const r = this.rainAmt;
+    set(A.rain.g.gain, (0.25 + 0.75 * on) * r * 0.09, 0.6);
+    set(A.rainLow.g.gain, (0.25 + 0.75 * on) * r * 0.12, 0.6);
 
     // birds by day around trees and meadows
     this.birdT -= dt;
     if (this.birdT <= 0) {
-      const life = s.day * (1 - s.snow) * (0.35 + 0.65 * s.forest) * (1 - alt * 0.8) * on;
+      const life = s.day * (1 - s.snow) * (0.35 + 0.65 * s.forest) * (1 - alt * 0.8) * on * (1 - Math.min(1, this.rainAmt * 2));
       if (Math.random() < life) this.bird();
       this.birdT = rnd(1.2, 4.5);
     }
     // crickets at night on grass
     this.cricketT -= dt;
     if (this.cricketT <= 0) {
-      const k = s.night * (1 - s.snow) * (1 - alt) * on;
+      const k = s.night * (1 - s.snow) * (1 - alt) * on * (1 - Math.min(1, this.rainAmt * 2));
       if (k > 0.05) this.cricket(k);
       this.cricketT = rnd(0.35, 0.8);
     }
+  }
+
+  setRain(r) {
+    this.rainAmt = r;
+  }
+
+  thunder(k = 1) {
+    if (!this.ready) return;
+    k = Math.max(0.25, Math.min(1, k));
+    this.nz({ type: 'highpass', f: 1800, a: 0.003, d: 0.12, gain: 0.12 * k });
+    this.nz({ type: 'lowpass', f: 900, f2: 120, a: 0.02, d: 2.6, gain: 0.45 * k, buf: 'brown', bus: this.ambBus });
+    this.nz({ type: 'lowpass', f: 300, f2: 60, a: 0.25, d: 3.2, gain: 0.35 * k, buf: 'brown', bus: this.ambBus, delay: 0.15 });
+    this.tone({ f: 48, f2: 30, a: 0.1, d: 2.4, gain: 0.18 * k, bus: this.ambBus });
   }
 
   bird() {
@@ -568,9 +586,44 @@ export class Sound {
     [48, 55, 60, 64, 67, 72].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(n + 12), a: 0.4, d: 2.2, gain: 0.035, delay: i * 0.1, verb: 0.8 }));
   }
 
+  // a flock taking off
+  flutter() {
+    for (let i = 0; i < 7; i++) this.nz({ f: rnd(900, 1600), q: 1.2, a: 0.005, d: 0.05, gain: 0.05, delay: i * rnd(0.03, 0.07), pan: rnd(-0.5, 0.5) });
+    for (let i = 0; i < 3; i++) this.tone({ f: rnd(3000, 4200), f2: rnd(2400, 3000), d: 0.05, gain: 0.012, delay: 0.1 + i * 0.09, bus: this.ambBus });
+  }
+
+  fishSplash() {
+    if (!this.gate('fish', 300)) return;
+    this.nz({ type: 'lowpass', f: 2200, f2: 600, q: 0.6, a: 0.005, d: 0.25, gain: 0.1, buf: 'pink', bus: this.ambBus });
+    this.tone({ f: 500, f2: 1200, d: 0.05, gain: 0.025, delay: 0.04, bus: this.ambBus });
+  }
+
   updraft() {
     if (!this.gate('updraft', 1500)) return;
     this.nz({ f: 300, f2: 1600, q: 0.9, a: 0.3, d: 0.8, gain: 0.1 });
+  }
+
+  pick() {
+    this.nz({ f: 2400, q: 1, a: 0.005, d: 0.08, gain: 0.08 });
+    [0, 7].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(84 + n), d: 0.18, gain: 0.04, delay: 0.04 + i * 0.06, bus: this.uiBus }));
+  }
+  cookStart() {
+    this.nz({ type: 'bandpass', f: 1400, q: 0.6, a: 0.1, d: 0.8, gain: 0.08, buf: 'pink' });
+    for (let i = 0; i < 6; i++) this.tone({ f: rnd(300, 600), f2: rnd(700, 1000), d: 0.05, gain: 0.025, delay: 0.1 + i * 0.12 });
+  }
+  cookDone() {
+    [0, 4, 7, 12].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(76 + n), d: 0.35, gain: 0.05, delay: i * 0.07, verb: 0.4, bus: this.uiBus }));
+  }
+  blip() {
+    if (!this.gate('blip', 60)) return;
+    this.tone({ f: rnd(880, 990), d: 0.025, gain: 0.012, bus: this.uiBus });
+  }
+  questStep() {
+    [0, 5, 9].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(74 + n), d: 0.5, gain: 0.045, delay: i * 0.09, verb: 0.5, bus: this.uiBus }));
+  }
+  questDone() {
+    [0, 4, 7, 12, 16, 19].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(72 + n), a: 0.02, d: 0.9, gain: 0.05, delay: i * 0.09, verb: 0.6, bus: this.uiBus }));
+    this.nz({ type: 'highpass', f: 5000, a: 0.3, d: 1.2, gain: 0.04, verb: 0.5 });
   }
 
   // ------------------------------------------------------------------ UI

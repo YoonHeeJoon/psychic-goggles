@@ -498,6 +498,8 @@ export class Exploration {
       if (!wp.active) consider(wp.pos, 3.6, '순간이동 포인트 활성화', () => this.activateWaypoint(wp));
       else consider(wp.pos, 3.0, '지도 열기 · 순간이동', () => this.g.openMap(wp));
     }
+    // villagers, pickable plants, cooking pots, quest spots
+    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest]) if (prov) prov.consider(P.pos, consider);
     const st = this.S.statue;
     const d = Math.hypot(P.pos.x - st.center.x, P.pos.z - st.center.z);
     if (d < 9 && d < bd && P.pos.y < st.center.y + 4) best = { label: '바람의 수호상 · 기도하기', act: () => this.pray() };
@@ -593,6 +595,7 @@ export class Exploration {
     this.vfx.burst(st.orbPos, '#7ff5dc', 50, { speed: 7, size: 0.25, life: 1, gravity: 0, up: 0.5 });
     g.flashScreen('#cffff4', 0.25);
     g.sfx.bless();
+    if (g.quest) g.quest.onEvent('pray');
     const wp = this.S.waypoints.find((w) => w.statue);
     if (wp && !wp.active) this.activateWaypoint(wp);
     const before = this.blessing;

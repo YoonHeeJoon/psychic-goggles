@@ -306,9 +306,11 @@ void main(){
     float v = snoise(vWorldPos.xz * 0.35 + vWorldPos.y * 0.3) * 0.08;
     albedo = mix(albedo * (1.0 + v), vec3(0.17, 0.33, 0.08) * (1.0 + v), m * 0.85);
   }
+  albedo *= 1.0 - 0.2 * uWet;
   float shadow = getShadowMask();
   vec3 col = stylize(albedo, n, shadow, 1.0, uWrap);
   vec3 V = normalize(cameraPosition - vWorldPos);
+  if (uIsRock > 0.5) col += wetSheen(n, V, uWet * 0.7, shadow);
   float back = pow(max(dot(-V, uSunDir), 0.0), 4.0);
   col += uSunColor * albedo * back * uTranslucency * (0.4 + 0.6 * shadow);
   float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);

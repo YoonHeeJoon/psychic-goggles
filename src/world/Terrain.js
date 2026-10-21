@@ -615,11 +615,20 @@ void main(){
   float under = smoothstep(0.2, -1.5, wp.y);
   albedo *= 1.0 - under * 0.25;
 
+  // rain: darker soil, puddles in flat hollows
+  float wet = uWet * (1.0 - snowT) * smoothstep(0.0, 0.4, wp.y);
+  float flatK = smoothstep(0.86, 0.97, n.y);
+  float puddle = wet * flatK * smoothstep(0.25, 0.55, snoise(wp.xz * 0.09) * 0.7 + snoise(wp.xz * 0.31) * 0.3) * (1.0 - rockAll);
+  albedo *= 1.0 - 0.36 * wet;
+  albedo = mix(albedo, albedo * 0.35, puddle);
+  vec3 wetN = normalize(mix(lightN, vec3(0.0, 1.0, 0.0), puddle));
+
   float shadow = getShadowMask();
   vec3 col = stylize(albedo, lightN, shadow, 1.0, 0.25 + rockAll * 0.1);
   vec3 V = normalize(cameraPosition - wp);
   vec3 H = normalize(uSunDir + V);
   col += uSunColor * snowT * pow(max(dot(lightN, H), 0.0), 40.0) * 0.25 * shadow;
+  col += wetSheen(wetN, V, wet * (0.35 + 0.65 * flatK) + puddle * 1.4, shadow);
 
   gl_FragColor = vec4(col, 1.0);
   ${FRAG_TAIL}

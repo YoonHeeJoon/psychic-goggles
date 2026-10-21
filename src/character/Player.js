@@ -97,7 +97,7 @@ export class Player {
   }
 
   useStamina(n) {
-    this.stamina = Math.max(0, this.stamina - n);
+    this.stamina = Math.max(0, this.stamina - n * (this.staminaMul || 1));
     this.staminaDelay = 1.0;
     if (this.stamina <= 0) this.exhausted = true;
   }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { elementIcon } from './icons.js';
 import { ELEMENTS } from '../character/characters.js';
 import { PRESETS } from '../core/Renderer.js';
+import { WEATHER_MODES } from '../world/Weather.js';
 import { HALF, WORLD_SIZE, RES, SEA_LEVEL } from '../world/Terrain.js';
 
 const el = (tag, cls, html) => {
@@ -63,8 +64,9 @@ export class HUD {
       'top-right',
       `<div class="pill time">${elementIcon('clock', '#fff', 16)}<span class="t">09:00</span></div>
        <div class="pill gems">${elementIcon('gem', '#9fe8ff', 16)}<span class="g">0</span></div>
-       <div class="pill keyhint"><b>M</b> 지도</div>
-       <div class="pill keyhint"><b>Esc</b> 메뉴</div>`
+       <div class="pill keyhint" data-act="map"><b>M</b> 지도</div>
+       <div class="pill keyhint" data-act="bag"><b>B</b> 가방</div>
+       <div class="pill keyhint" data-act="menu"><b>Esc</b> 메뉴</div>`
     );
     L.appendChild(this.topRight);
 
@@ -115,7 +117,7 @@ export class HUD {
       'help',
       `<div><b>좌클릭</b> 공격 · <b>E</b> 원소 스킬 · <b>Q</b> 원소 폭발 · <b>공중 좌클릭</b> 낙하 공격</div>
        <div><b>WASD</b> 이동 · <b>Shift</b> 질주(회피) · <b>Space</b> 점프/활공 · <b>1-4</b> 교체 · <b>H</b> 도움말</div>
-       <div><b>F</b> 상호작용 · <b>M</b> 지도 · 상승 기류에 들어가면 하늘로 떠오릅니다</div>`
+       <div><b>F</b> 대화·채집·상호작용 · <b>B</b> 가방 · <b>M</b> 지도 · 상승 기류에 들어가면 하늘로 떠오릅니다</div>`
     );
     L.appendChild(this.help);
 
@@ -296,8 +298,33 @@ export class HUD {
     // markers
     const now = performance.now() / 1000;
     for (const m of markers) {
-      const x = W / 2 + (m.x - player.pos.x) * zoom;
-      const y = W / 2 + (m.z - player.pos.z) * zoom;
+      let x = W / 2 + (m.x - player.pos.x) * zoom;
+      let y = W / 2 + (m.z - player.pos.z) * zoom;
+      if (m.shape === 'quest') {
+        // quest target sticks to the rim when it is out of range
+        const dx = x - W / 2,
+          dy = y - W / 2;
+        const l = Math.hypot(dx, dy);
+        const R = W / 2 - 14;
+        if (l > R) {
+          x = W / 2 + (dx / l) * R;
+          y = W / 2 + (dy / l) * R;
+        }
+        const s = 7 + Math.sin(now * 4) * 1.2;
+        g.fillStyle = 'rgba(30,24,10,0.75)';
+        g.beginPath();
+        g.arc(x, y, s + 3, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#ffd56a';
+        g.beginPath();
+        g.moveTo(x, y - s);
+        g.lineTo(x + s * 0.7, y);
+        g.lineTo(x, y + s);
+        g.lineTo(x - s * 0.7, y);
+        g.closePath();
+        g.fill();
+        continue;
+      }
       if (x < -12 || x > W + 12 || y < -12 || y > W + 12) continue;
       if (m.shape === 'wp') {
         g.fillStyle = 'rgba(20,30,40,0.8)';
@@ -400,7 +427,7 @@ export class Menus {
         <div class="controls">
           <div><b>WASD</b> 이동</div><div><b>Shift</b> 질주 · 회피</div><div><b>Space</b> 점프 · 공중에서 활공</div><div><b>절벽으로 이동</b> 등반</div>
           <div><b>좌클릭</b> 일반 공격</div><div><b>E</b> 원소 스킬</div><div><b>Q</b> 원소 폭발</div><div><b>1-4</b> 캐릭터 교체</div>
-          <div><b>F</b> 상호작용</div><div><b>M</b> 지도 · 순간이동</div><div><b>상승 기류</b> 하늘로 비상</div><div><b>H</b> 도움말</div>
+          <div><b>F</b> 대화 · 채집</div><div><b>M</b> 지도 · 순간이동</div><div><b>B</b> 가방 · 요리</div><div><b>H</b> 도움말</div>
         </div>
         <div class="touch-controls"><b>왼쪽</b> 끌어서 이동 · <b>오른쪽</b> 끌어서 시점 · 버튼으로 공격 · 스킬 · 점프 · 질주<br>초상화를 눌러 캐릭터 교체 · 활공 중 공격 버튼으로 낙하 공격</div>
       </div>
@@ -420,6 +447,9 @@ export class Menus {
         <label class="row"><input type="checkbox" class="mute" id="opt-mute"> 소리 끄기</label>
         <label>시간 <input type="range" class="tod" id="opt-tod" min="0" max="24" step="0.05" value="9"></label>
         <label>시간 흐름 <select class="tspeed" id="opt-tspeed"><option value="0">멈춤</option><option value="1" selected>보통 (하루 24분)</option><option value="6">빠름</option><option value="30">매우 빠름</option></select></label>
+        <label>날씨 <select class="weather" id="opt-weather">${Object.entries(WEATHER_MODES)
+          .map(([k, v]) => `<option value="${k}">${v}</option>`)
+          .join('')}</select></label>
         <label class="row"><input type="checkbox" class="inv" id="opt-inv"> 상하 반전</label>
         <label class="row"><input type="checkbox" class="autores" id="opt-autores"> 자동 해상도 (프레임 유지)</label>
         <label class="row"><input type="checkbox" class="showfps" id="opt-showfps"> FPS 표시</label>
@@ -460,6 +490,7 @@ export class Menus {
     mute.addEventListener('change', (e) => g.sfx.setMuted(e.target.checked));
     P.querySelector('.tod').addEventListener('input', (e) => (g.env.time = +e.target.value));
     P.querySelector('.tspeed').addEventListener('change', (e) => (g.env.timeScale = +e.target.value / 60));
+    P.querySelector('.weather').addEventListener('change', (e) => g.weather.setMode(e.target.value));
     P.querySelector('.inv').addEventListener('change', (e) => (g.cameraCtl.invertY = e.target.checked));
     const ar = P.querySelector('.autores');
     ar.checked = g.autoRes;
@@ -470,6 +501,7 @@ export class Menus {
 
   showPause() {
     this.pause.querySelector('.tod').value = this.game.env.time;
+    this.pause.querySelector('.weather').value = this.game.weather.mode;
     this.pause.classList.remove('hidden');
   }
   hidePause() {

@@ -181,9 +181,10 @@ export class TouchControls {
       const i = [...hud.partyEl.children].indexOf(row);
       if (i >= 0) this.pulse('Digit' + (i + 1));
     });
-    const pills = hud.topRight.querySelectorAll('.keyhint');
-    if (pills[0]) this.tap(pills[0], () => g.openMap());
-    if (pills[1]) this.tap(pills[1], () => g.pause());
+    for (const p of hud.topRight.querySelectorAll('.keyhint')) {
+      const act = p.dataset.act;
+      this.tap(p, () => (act === 'map' ? g.openMap() : act === 'bag' ? g.openPanel(g.bag) : g.pause()));
+    }
   }
 
   // press for one frame

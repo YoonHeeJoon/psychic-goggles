@@ -69,6 +69,9 @@ uniform vec3 uCloudShade;
 uniform float uTime;
 uniform float uNight;
 uniform float uCloudCover;
+uniform float uOvercast;
+uniform float uRainbow;
+uniform float uFlash;
 varying vec3 vDir;
 ${NOISE_GLSL}
 
@@ -88,9 +91,10 @@ void main(){
   // sun glow + disc
   float sd = max(dot(d, uSunDir), 0.0);
   vec3 sunTint = uSunColor / max(max(uSunColor.r, uSunColor.g), 0.001);
-  col += sunTint * pow(sd, 8.0) * 0.18 * (1.0 - uNight);
-  col += sunTint * pow(sd, 90.0) * 0.5 * (1.0 - uNight);
-  col += sunTint * smoothstep(0.9993, 0.9996, sd) * 6.0 * (1.0 - uNight);
+  float clearSky = 1.0 - uOvercast * 0.92;
+  col += sunTint * pow(sd, 8.0) * 0.18 * (1.0 - uNight) * clearSky;
+  col += sunTint * pow(sd, 90.0) * 0.5 * (1.0 - uNight) * clearSky;
+  col += sunTint * smoothstep(0.9993, 0.9996, sd) * 6.0 * (1.0 - uNight) * clearSky;
 
   // moon
   float md = dot(d, uMoonDir);
@@ -137,6 +141,20 @@ void main(){
     cCol += sunTint * pow(sd, 6.0) * 0.6 * (1.0 - density * 0.6) * (1.0 - uNight);
     col = mix(col, cCol, density * 0.96);
     occ = density * 0.85;
+    // rainbow opposite the sun after a shower (red outside, violet inside)
+    if (uRainbow > 0.001) {
+      float a = degrees(acos(clamp(dot(d, -uSunDir), -1.0, 1.0)));
+      float t = (a - 40.0) / 2.8;
+      float band = smoothstep(0.0, 0.18, t) * smoothstep(1.0, 0.8, t);
+      vec3 rb = clamp(abs(fract((1.0 - t) * 0.78 + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+      float t2 = (a - 50.5) / 3.4;
+      float band2 = smoothstep(0.0, 0.2, t2) * smoothstep(1.0, 0.8, t2);
+      vec3 rb2 = clamp(abs(fract(t2 * 0.78 + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+      float fade = uRainbow * smoothstep(-0.01, 0.12, h) * (1.0 - density * 0.7) * (1.0 - uNight);
+      col += (rb * band * 0.32 + rb2 * band2 * 0.1) * fade;
+    }
+    // lightning lights the clouds from inside
+    col += vec3(0.7, 0.76, 1.0) * uFlash * (0.25 + density * 1.3);
 
     // ---- towering cumulus near horizon (azimuthal billboards)
     float az = atan(d.x, d.z);
@@ -181,6 +199,9 @@ export class Environment {
       uTime: shared.uTime,
       uNight: shared.uNight,
       uCloudCover: { value: 0.5 },
+      uOvercast: { value: 0 },
+      uRainbow: { value: 0 },
+      uFlash: { value: 0 },
     };
     const skyGeo = new THREE.SphereGeometry(1, 48, 24);
     this.sky = new THREE.Mesh(
@@ -228,6 +249,7 @@ export class Environment {
     this.fogBase = 0.0016;
 
     this._tmpA = {};
+    this.overcast = 0; // set by Weather (0 clear .. 1 storm)
     this.update(0, new THREE.Vector3());
   }
 
@@ -290,6 +312,30 @@ export class Environment {
     this.moonDir.normalize();
 
     const p = this.palette(elevDeg);
+    const oc = this.overcast;
+    if (oc > 0.001) {
+      // grey, dim sky and light under rain clouds
+      const grey = (c, k, dark) => {
+        const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
+        c.r += (l - c.r) * k;
+        c.g += (l - c.g) * k;
+        c.b += (l - c.b) * k;
+        c.multiplyScalar(1 - dark);
+      };
+      grey(p.zen, 0.75 * oc, 0.42 * oc);
+      grey(p.hor, 0.7 * oc, 0.3 * oc);
+      grey(p.fog, 0.65 * oc, 0.28 * oc);
+      p.sun.multiplyScalar(1 - 0.7 * oc);
+      grey(p.sky, 0.45 * oc, 0.2 * oc);
+      grey(p.gnd, 0.3 * oc, 0.25 * oc);
+      grey(p.cloudL, 0.55 * oc, 0.45 * oc);
+      grey(p.cloudS, 0.5 * oc, 0.35 * oc);
+      grey(p.lit, 0.35 * oc, 0.28 * oc);
+      grey(p.shade, 0.3 * oc, 0.1 * oc);
+    }
+    this.skyUniforms.uCloudCover.value = 0.5 + 0.5 * oc;
+    this.skyUniforms.uOvercast.value = oc;
+    this.scene.fog.density = this.fogBase * (1 + 1.4 * oc);
     const night = smoothstep(-2, -10, elevDeg);
     shared.uNight.value = night;
     shared.uZenith.value.copy(p.zen);

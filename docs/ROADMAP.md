@@ -31,8 +31,14 @@ Chromium screenshots, then commits.
 - [x] Touch controls for mobile, performance pass (LOD, culling)
 - [x] God rays / sun shafts, distant mountain impostors
 
-## Iteration 5 — world life & story
-- [ ] NPCs in the village (idle routines, speech bubbles), a short opening quest with dialogue UI
-- [ ] Cooking / gathering: pickable flowers, mushrooms and fruit with an inventory panel
-- [ ] Weather: rain showers with wet ground and rainbows, thunderstorms at night
-- [ ] Wildlife: birds that scatter, butterflies and fireflies, fish in the lake
+## Iteration 5 — world life & story ✅
+- [x] NPCs in the village (idle routines, speech bubbles), a short opening quest with dialogue UI
+- [x] Cooking / gathering: pickable flowers, mushrooms and fruit with an inventory panel
+- [x] Weather: rain showers with wet ground and rainbows, thunderstorms at night
+- [x] Wildlife: birds that scatter, butterflies and fireflies, fish in the lake
+
+## Iteration 6 — challenges & bosses
+- [ ] Elemental puzzles (torches to light, wind pinwheels, timed trials) guarding exquisite chests
+- [ ] A boss arena: a giant elemental beast with phases, shield break and telegraphed attacks
+- [ ] Character level-ups / talents from gems, damage scaling and enemy levels by region
+- [ ] Domain-style challenge with a reward chest and a short cinematic intro

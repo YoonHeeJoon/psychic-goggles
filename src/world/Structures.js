@@ -308,9 +308,12 @@ void main(){
     alb = mix(alb, moss, m);
   }
   float ao = mix(uAO, 1.0, smoothstep(-0.2, 1.5, above));
+  float wet = uWet * smoothstep(-0.2, 0.6, n.y + 0.3);
+  alb *= 1.0 - 0.3 * wet;
   float shadow = getShadowMask();
   vec3 col = stylize(alb, n, shadow, ao, uWrap);
   vec3 V = normalize(cameraPosition - vW);
+  col += wetSheen(n, V, wet * 0.8, shadow);
   float fr = pow(1.0 - max(dot(n, V), 0.0), 4.0);
   col += uSkyAmb * alb * fr * 0.45;
   if (uSpec > 0.0) {
@@ -1446,6 +1449,8 @@ export class Structures {
         wz = R.z - 3.2 * Math.cos(rot);
       this.solids.addBox(wx, wz, 1.2, 0.8, rot, y0 + ph + 1.0);
       const rc = y0 + ph + 3.2;
+      this.ringBase = new V3(wx, y0 + ph, wz);
+      this.ringCenter = new V3(wx, rc, wz);
       this.solids.addBox(wx, wz, 3.75, 0.45, rot, (lx) => rc + Math.sqrt(Math.max(0, 3.8 * 3.8 - lx * lx)));
       this.ringTop = new V3(0, ph + 3.2 + 3.8, -3.2).applyMatrix4(W);
     }

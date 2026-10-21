@@ -16,6 +16,7 @@ export const shared = {
   uWindStrength: { value: 1.0 },
   uPlayerPos: { value: new THREE.Vector3() },
   uNight: { value: 0 },
+  uWet: { value: 0 }, // rain wetness 0..1 (weather)
 };
 
 // Terrain lookup uniforms (filled in by Terrain once generated).
@@ -74,7 +75,17 @@ uniform vec3 uSunColor;
 uniform vec3 uSkyAmb;
 uniform vec3 uGroundAmb;
 uniform float uTime;
+uniform float uWet;
+uniform vec3 uZenith;
+uniform vec3 uHorizon;
 vec3 ambientLight(vec3 n){ return mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5); }
+// Rain-soaked look: darker albedo, sky sheen at grazing angles, sharp sun glint.
+vec3 wetSheen(vec3 n, vec3 V, float k, float shadow){
+  float fr = pow(1.0 - max(dot(n, V), 0.0), 4.0);
+  vec3 H = normalize(uSunDir + V);
+  vec3 sky = mix(uHorizon, uZenith, 0.35);
+  return (sky * (0.06 + 0.5 * fr) + uSunColor * pow(max(dot(n, H), 0.0), 90.0) * 1.1 * shadow) * k;
+}
 // Soft "painterly" diffuse: wrapped lambert pushed through an S-curve.
 vec3 stylize(vec3 albedo, vec3 n, float shadow, float ao, float wrap){
   float ndl = dot(n, uSunDir);

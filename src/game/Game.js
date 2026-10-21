@@ -6,6 +6,14 @@ import { Terrain, SPAWN, LANDMARKS } from '../world/Terrain.js';
 import { Environment } from '../world/Environment.js';
 import { Water } from '../world/Water.js';
 import { Horizon } from '../world/Horizon.js';
+import { Weather } from '../world/Weather.js';
+import { Wildlife } from '../world/Wildlife.js';
+import { Gathering } from '../world/Gathering.js';
+import { NPCs } from '../world/NPCs.js';
+import { Bag, CookPanel, BuffBar } from '../ui/Panels.js';
+import { Dialogue } from '../ui/Dialogue.js';
+import { Quest } from './Quest.js';
+import { ITEMS } from './Items.js';
 import { Grass } from '../world/Grass.js';
 import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
@@ -70,6 +78,7 @@ export class Game {
     this.structures.build();
     this.ground = this.structures.ground;
     this.explore = new Exploration(this);
+    this.gathering = new Gathering(this);
     this.scene.add(this.terrain.buildMesh(q.terrainStep));
 
     loader.set(0.35, '하늘과 바다를 칠하는 중...');
@@ -91,6 +100,11 @@ export class Game {
     this.cameraCtl.yaw = 0;
     this.combat = new Combat(this);
     this.explore.build();
+    this.weather = new Weather(this);
+    this.wildlife = new Wildlife(this);
+    this.gathering.build();
+    this.npcs = new NPCs(this);
+    this.buffs = { atk: 0, stamina: 0 };
 
     this.rendererW.setup(this.scene, this.camera);
     this.hud = new HUD(this.container);
@@ -99,6 +113,11 @@ export class Game {
     this.hud.setParty(this.player.party, this.player.active);
     this.menus = new Menus(this.container, this);
     this.worldMap = new WorldMap(this.container, this);
+    this.bag = new Bag(this, this.container);
+    this.cookPanel = new CookPanel(this, this.container);
+    this.buffBar = new BuffBar(this.hud.layer);
+    this.dialogue = new Dialogue(this, this.container);
+    this.quest = new Quest(this);
     if (TouchControls.wanted()) this.touch = new TouchControls(this);
     this.tpFade = document.createElement('div');
     this.tpFade.className = 'tp-fade';
@@ -129,7 +148,12 @@ export class Game {
         if (this.state === 'playing') this.openMap();
         else if (this.state === 'map') this.closeMap();
       }
+      if (e.code === 'KeyB') {
+        if (this.state === 'playing') this.openPanel(this.bag);
+        else if (this.state === 'panel' && this.panel === this.bag) this.closePanel();
+      }
       if (e.code === 'Escape' && this.state === 'map') this.closeMap();
+      if (e.code === 'Escape' && this.state === 'panel') this.closePanel();
     });
     window.addEventListener('beforeunload', () => this.explore.save());
     // audio unlocks on the first gesture; every button gets a soft click
@@ -219,6 +243,117 @@ export class Game {
     this.cameraCtl.pitch = 0.18;
     this.clock.getDelta();
     setTimeout(() => this.hud.toast(`<b>${this.player.current.cfg.name}</b> · ${this.player.current.cfg.title}`, ELEMENTS[this.player.current.cfg.element].color), 600);
+    this.quest.start();
+  }
+
+  // ---- bag / cooking panels
+  openPanel(p, arg) {
+    if (this.state !== 'playing') return;
+    this.state = 'panel';
+    this.panel = p;
+    this.input.enabled = false;
+    this.input.keys.clear();
+    this.input.exitLock();
+    this.hud.setPrompt('');
+    this.explore.promptText = '';
+    p.open(arg);
+    this.sfx.open();
+  }
+
+  closePanel() {
+    if (this.state !== 'panel') return;
+    this.panel.close();
+    this.panel = null;
+    this.state = 'playing';
+    this.input.enabled = true;
+    this.input.requestLock();
+    this.clock.getDelta();
+    this.sfx.close();
+    this.explore.save();
+  }
+
+  openCook(pot) {
+    this.openPanel(this.cookPanel, pot);
+  }
+
+  applyFood(id) {
+    const it = ITEMS[id];
+    const fx = it.effect || {};
+    if (fx.heal) this.combat.heal(fx.heal);
+    if (fx.atk) this.buffs.atk = fx.atk;
+    if (fx.stamina) this.buffs.stamina = fx.stamina;
+    this.sfx.cookDone();
+    this.hud.toast(`<b>${it.name}</b> · ${it.effectText}`, '#ffd36a');
+    this.hud.setParty(this.player.party, this.player.active);
+  }
+
+  updateBuffs(dt) {
+    const B = this.buffs;
+    B.atk = Math.max(0, B.atk - dt);
+    B.stamina = Math.max(0, B.stamina - dt);
+    this.combat.stats.atk = 1150 * (B.atk > 0 ? 1.2 : 1);
+    this.player.staminaMul = B.stamina > 0 ? 0.7 : 1;
+    this.buffBar.update(B);
+  }
+
+  // ---- dialogue
+  talkTo(npc) {
+    return this.runScript(npc, this.quest.script(npc));
+  }
+
+  runScript(npc, fn) {
+    if (this.state !== 'playing') return Promise.resolve();
+    this.state = 'dialog';
+    this.talkNpc = npc;
+    if (npc) npc.talking = true;
+    this.input.enabled = false;
+    this.input.keys.clear();
+    this.input.exitLock();
+    this.hud.setPrompt('');
+    this.explore.promptText = '';
+    this.hud.layer.classList.add('cine');
+    this.dlgCam = null;
+    const P = this.player;
+    if (npc) P.yaw = Math.atan2(npc.pos.x - P.pos.x, npc.pos.z - P.pos.z);
+    return this.dialogue.run(fn).finally(() => {
+      if (npc) npc.talking = false;
+      this.talkNpc = null;
+      this.hud.layer.classList.remove('cine');
+      if (this.state === 'dialog') {
+        this.state = 'playing';
+        this.input.enabled = true;
+        this.input.requestLock();
+        this.clock.getDelta();
+      }
+      this.explore.save();
+    });
+  }
+
+  // over-the-shoulder framing of the speaker during a conversation
+  updateDialogCamera(dt) {
+    const P = this.player;
+    const n = this.talkNpc;
+    const m = P.model;
+    m.root.position.copy(P.pos);
+    m.root.rotation.y = P.yaw = n ? Math.atan2(n.pos.x - P.pos.x, n.pos.z - P.pos.z) : P.yaw;
+    m.update(dt, { mode: 'idle', speed: 0 });
+    if (!n) return;
+    const dx = n.pos.x - P.pos.x,
+      dz = n.pos.z - P.pos.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const fx = dx / l,
+      fz = dz / l;
+    const sx = -fz,
+      sz = fx;
+    const h = n.pos.y + 1.45 * (n.def.cfg.scale || 1);
+    const want = new THREE.Vector3(P.pos.x - fx * 1.6 + sx * 1.1, Math.max(P.pos.y, n.pos.y) + 1.55, P.pos.z - fz * 1.6 + sz * 1.1);
+    const look = new THREE.Vector3(n.pos.x - sx * 0.35, h, n.pos.z - sz * 0.35);
+    if (!this.dlgCam) this.dlgCam = { pos: this.camera.position.clone(), look: look.clone() };
+    const k = 1 - Math.exp(-dt * 5);
+    this.dlgCam.pos.lerp(want, k);
+    this.dlgCam.look.lerp(look, k);
+    this.camera.position.copy(this.dlgCam.pos);
+    this.camera.lookAt(this.dlgCam.look);
   }
 
   pause() {
@@ -470,10 +605,10 @@ export class Game {
     if (day > 0.02) {
       const low = 1 - smoothstep(0.08, 0.6, s.y);
       col.copy(shared.uSunColor.value).multiplyScalar(0.17 * (1 + 1.0 * low));
-      this.rendererW.updateRays(this.camera, s, col, day);
+      this.rendererW.updateRays(this.camera, s, col, day * (1 - this.weather.overcast * 0.85));
     } else {
       col.setRGB(0.5, 0.62, 1.0).multiplyScalar(0.1);
-      this.rendererW.updateRays(this.camera, env.moonDir, col, shared.uNight.value);
+      this.rendererW.updateRays(this.camera, env.moonDir, col, shared.uNight.value * (1 - this.weather.overcast));
     }
   }
 
@@ -495,17 +630,31 @@ export class Game {
       this.handleEvents();
       this.explore.update(gdt, this.input);
       C.lateUpdate(gdt, dt);
-    } else if (this.state === 'map') {
+    } else if (this.state === 'map' || this.state === 'panel') {
       this.combat.lateUpdate(0, dt);
+    } else if (this.state === 'dialog') {
+      this.combat.lateUpdate(0, dt);
+      this.updateDialogCamera(dt);
     }
+    if (this.state === 'playing') this.updateBuffs(dt);
+    if (this.state !== 'paused' && this.state !== 'loading') {
+      this.gathering.update(dt);
+      this.npcs.update(dt);
+    }
+    if (this.quest) this.quest.update();
     this.structures.update(dt, shared.uWindStrength.value);
     if (this.touch) this.touch.setVisible(this.state === 'playing');
     const gu = this.rendererW.grade.uniforms;
     gu.uFlash.value = Math.max(0, gu.uFlash.value - dt * 2.2);
-    if (this.state !== 'paused') this.env.update(dt, P.pos);
+    gu.uSaturation.value = 1.04 - 0.22 * this.weather.overcast;
+    if (this.state !== 'paused') {
+      this.weather.update(dt);
+      this.env.update(dt, P.pos);
+    }
     this.env.followCamera(this.camera);
     this.water.update(this.camera);
     this.vegetation.update(this.camera);
+    if (this.state !== 'paused') this.wildlife.update(dt);
     this.grass.update(this.state === 'playing' ? P.pos : this.camera.position);
     shared.uPlayerPos.value.copy(P.pos);
     this.updateAudio(dt);
@@ -537,6 +686,9 @@ export class Game {
         if (e.alive && Math.abs(e.pos.x - P.pos.x) < 60 && Math.abs(e.pos.z - P.pos.z) < 60) markers.push({ x: e.pos.x, z: e.pos.z, color: '#ff5a4a', r: 3 });
       }
       this.explore.minimapMarkers(P, markers);
+      this.gathering.minimapMarkers(P, markers);
+      this.npcs.minimapMarkers(P, markers);
+      this.quest.minimapMarker(markers);
       this.hud.drawMinimap(P, this.cameraCtl.yaw, markers);
     }
     this.fpsAcc += dt;

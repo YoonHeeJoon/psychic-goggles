@@ -98,6 +98,7 @@ void main(){
   vec3 tip = base * 1.32 + vec3(0.035, 0.03, 0.0);
   vec3 albedo = mix(base * 0.62, tip, smoothstep(0.0, 1.0, vT));
   albedo *= 1.0 + vWave * 0.22 * vT;
+  albedo *= 1.0 - 0.22 * uWet;
   vec3 n = normalize(vN);
   vec3 col = stylize(albedo, n, shadow, mix(0.65, 1.0, vT), 0.35);
   vec3 V = normalize(cameraPosition - vWorldPos);
