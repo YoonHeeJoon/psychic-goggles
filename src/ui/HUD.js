@@ -66,6 +66,7 @@ export class HUD {
        <div class="pill gems">${elementIcon('gem', '#9fe8ff', 16)}<span class="g">0</span></div>
        <div class="pill keyhint" data-act="map"><b>M</b> 지도</div>
        <div class="pill keyhint" data-act="bag"><b>B</b> 가방</div>
+       <div class="pill keyhint" data-act="char"><b>C</b> 캐릭터</div>
        <div class="pill keyhint" data-act="menu"><b>Esc</b> 메뉴</div>`
     );
     L.appendChild(this.topRight);
@@ -117,7 +118,7 @@ export class HUD {
       'help',
       `<div><b>좌클릭</b> 공격 · <b>E</b> 원소 스킬 · <b>Q</b> 원소 폭발 · <b>공중 좌클릭</b> 낙하 공격</div>
        <div><b>WASD</b> 이동 · <b>Shift</b> 질주(회피) · <b>Space</b> 점프/활공 · <b>1-4</b> 교체 · <b>H</b> 도움말</div>
-       <div><b>F</b> 대화·채집·상호작용 · <b>B</b> 가방 · <b>M</b> 지도 · 상승 기류에 들어가면 하늘로 떠오릅니다</div>`
+       <div><b>F</b> 대화·채집·상호작용 · <b>B</b> 가방 · <b>C</b> 캐릭터 · <b>M</b> 지도 · 상승 기류에 들어가면 하늘로 떠오릅니다</div>`
     );
     L.appendChild(this.help);
 
@@ -126,6 +127,8 @@ export class HUD {
 
     this.center = el('div', 'center-msg', '');
     L.appendChild(this.center);
+    this.timer = el('div', 'challenge-timer hidden', '');
+    L.appendChild(this.timer);
   }
 
   setParty(party, active) {
@@ -226,6 +229,12 @@ export class HUD {
       this.prompt.classList.remove('hidden');
       this.prompt.querySelector('.txt').textContent = text;
     }
+  }
+
+  // challenge timer at the top of the screen (null hides it)
+  setTimer(text) {
+    this.timer.classList.toggle('hidden', !text);
+    if (text && this.timer.textContent !== text) this.timer.textContent = text;
   }
 
   flashCenter(text, ms = 1500) {

@@ -217,6 +217,7 @@ export class Weather {
   update(dt) {
     const g = this.g;
     this.roll(dt);
+    if (g.domain && g.domain.inside) this.target = 0; // calm skies in the domain
     const before = this.rain;
     // clouds gather before the rain and linger a little after it
     this.overcast = damp(this.overcast, Math.min(1, this.target * 1.25), this.target > this.overcast ? 0.18 : 0.08, dt);

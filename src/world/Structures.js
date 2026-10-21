@@ -10,7 +10,8 @@ import {
   TERRAIN_SAMPLE_GLSL,
 } from '../render/shaders.js';
 import { toonMaterial } from '../render/materials.js';
-import { LANDMARKS, SPAWN, CELL } from './Terrain.js';
+import { LANDMARKS, SPAWN, CELL, DOMAIN_REALM } from './Terrain.js';
+import { shared } from '../render/shaders.js';
 import { mulberry32, smoothstep, lerp } from '../core/noise.js';
 
 const V3 = THREE.Vector3;
@@ -591,7 +592,33 @@ export const WAYPOINTS = [
   { id: 'village', name: '풍차 마을', x: -168, z: 170 },
   { id: 'ruins', name: '잊힌 유적', x: -244, z: -84 },
   { id: 'snow', name: '설산 기슭', x: 56, z: -86 },
+  { id: 'arena', name: '뇌광의 결전장', x: 334, z: -38 },
+  { id: 'gate', name: '바람 그림자 회랑 입구', x: -68, z: -78 },
 ];
+
+// Swirling additive portal (domain gate and the realm's exit)
+const PORTAL_VERT = /* glsl */ `
+varying vec2 vUv;
+void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const PORTAL_FRAG = /* glsl */ `
+uniform float uTime;
+uniform vec3 uA;
+uniform vec3 uB;
+uniform float uOpen;
+varying vec2 vUv;
+void main(){
+  vec2 p = vUv * 2.0 - 1.0;
+  p.y *= 0.8;
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float swirl = sin(a * 5.0 + r * 9.0 - uTime * 2.4) * 0.5 + 0.5;
+  float swirl2 = sin(a * 3.0 - r * 6.0 + uTime * 1.6) * 0.5 + 0.5;
+  float edge = smoothstep(1.0, 0.82, r);
+  float core = smoothstep(0.75, 0.0, r);
+  vec3 col = mix(uA, uB, swirl * 0.7 + swirl2 * 0.3) * (0.55 + core * 0.9) + vec3(1.0) * pow(core, 3.0) * 0.6;
+  float alpha = edge * (0.45 + 0.4 * swirl) * uOpen;
+  gl_FragColor = vec4(col * alpha, alpha);
+}`;
 
 export class Structures {
   constructor(scene, terrain) {
@@ -628,6 +655,7 @@ export class Structures {
       glass: propMat({ wrap: 0.2, spec: 0.6, glow: '#ffc27a', emitDay: 0.0, emitNight: 1.25 }),
       lamp: propMat({ wrap: 0.2, spec: 0.4, glow: '#ffbe6a', emitDay: 0.15, emitNight: 2.6 }),
       rune: propMat({ wrap: 0.2, glow: '#6ff0d2', emitDay: 1.4, emitNight: 2.2 }),
+      runeV: propMat({ wrap: 0.2, glow: '#c79bff', emitDay: 1.5, emitNight: 2.4 }),
     };
   }
 
@@ -635,6 +663,9 @@ export class Structures {
     this.buildStatue();
     this.buildVillage();
     this.buildRuins();
+    this.buildArena();
+    this.buildDomainGate();
+    this.buildRealm();
     this.buildWaypoints();
     this.terrain.paintAreas(this.areas);
   }
@@ -645,6 +676,205 @@ export class Structures {
 
   frame(x, y, z, rot) {
     return new THREE.Matrix4().compose(new V3(x, y, z), new THREE.Quaternion().setFromAxisAngle(Y_AXIS, rot), new V3(1, 1, 1));
+  }
+
+  portal(w, h, a = '#7ff5dc', bb = '#a98bff') {
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: PORTAL_VERT,
+      fragmentShader: PORTAL_FRAG,
+      uniforms: { uTime: shared.uTime, uA: { value: new THREE.Color(a) }, uB: { value: new THREE.Color(bb) }, uOpen: { value: 1 } },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    m.renderOrder = 4;
+    return m;
+  }
+
+  // ------------------------------------------------------------- boss arena
+  // A ring of storm-worn pillars on the eastern cliffs with a rune circle in
+  // the middle where the storm core sleeps.
+  buildArena() {
+    const A = LANDMARKS.arena;
+    const rand = mulberry32(31337);
+    const b = new Builder();
+    const y0 = this.terrain.heightAt(A.x, A.z);
+    const top = y0 + 0.32;
+    const R = 23;
+    b.add('stone', cyl(R, R + 0.3, 0.9, 64), { m: M(A.x, top - 0.9, A.z), color: '#c4bca8', uvScale: 0.35 });
+    // broken slabs breaking up the floor
+    for (let k = 0; k < 90; k++) {
+      const a = rand() * TAU,
+        r = 7 + Math.sqrt(rand()) * 15;
+      const s = 1.2 + rand() * 1.2;
+      b.add('ruin', box(s, 0.12, s * (0.7 + rand() * 0.6)), { m: M(A.x + Math.cos(a) * r, top - 0.06 + rand() * 0.05, A.z + Math.sin(a) * r, (rand() - 0.5) * 0.04, rand() * TAU, (rand() - 0.5) * 0.04), color: '#d2cab6', tone: 0.85 + rand() * 0.2, uvScale: 0.5 });
+    }
+    // gold inlay rings and the violet rune circle
+    for (const r of [6.5, 13, 19.5]) {
+      const g = new THREE.TorusGeometry(r, 0.07, 4, 96);
+      g.rotateX(Math.PI / 2);
+      b.add('gold', g, { m: M(A.x, top + 0.02, A.z), color: '#d9b45a' });
+    }
+    for (const r of [3.2, 5.2]) {
+      const g = new THREE.TorusGeometry(r, 0.09, 4, 72);
+      g.rotateX(Math.PI / 2);
+      b.add('runeV', g, { m: M(A.x, top + 0.04, A.z), color: '#5a3a8a', extra: 1 });
+    }
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * TAU;
+      const p0 = new V3(A.x + Math.cos(a) * 5.2, top + 0.04, A.z + Math.sin(a) * 5.2);
+      const p1 = new V3(A.x + Math.cos(a + (2 * TAU) / 6) * 5.2, top + 0.04, A.z + Math.sin(a + (2 * TAU) / 6) * 5.2);
+      b.add('runeV', beam(p0, p1, 0.1, 0.03), { color: '#5a3a8a', extra: 1, uv: 'keep' });
+    }
+    // curb
+    for (let k = 0; k < 64; k++) {
+      const a = (k / 64) * TAU;
+      b.add('stone', box(2.3, 0.45, 0.6), { m: M(A.x + Math.cos(a) * (R + 0.25), top - 0.2, A.z + Math.sin(a) * (R + 0.25), 0, -a + Math.PI / 2), color: '#b7af9a', uvScale: 0.5 });
+    }
+    // pillar ring with lintels
+    const pil = [];
+    const n = 12;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * TAU + 0.13;
+      const x = A.x + Math.cos(a) * (R + 2.4),
+        z = A.z + Math.sin(a) * (R + 2.4);
+      const gy = this.terrain.heightAt(x, z) - 0.2;
+      const broken = k % 4 === 2;
+      const h = broken ? 3 + rand() * 2.5 : 9;
+      b.add('ruin', box(2.0, 0.8, 2.0), { m: M(x, gy, z, 0, -a), color: '#bdb5a0', uvScale: 0.5 });
+      b.add('stone', cyl(0.68, 0.78, h, 14), { m: M(x, gy + 0.8, z), color: '#d8d0bc', uvScale: 0.5 });
+      if (!broken) b.add('ruin', box(1.9, 0.6, 1.9), { m: M(x, gy + 0.8 + h, z, 0, -a), color: '#c6bea9', uvScale: 0.5 });
+      else b.add('ruin', new THREE.DodecahedronGeometry(0.8, 0), { m: M(x + 1.4, gy + 0.3, z - 0.6, rand(), rand(), rand()), color: '#c6bea9', uvScale: 0.5 });
+      this.solids.addCircle(x, z, 1.0, gy + 0.8 + h + (broken ? 0 : 0.6));
+      pil.push({ x, z, gy, h, broken, a });
+    }
+    for (let k = 0; k < n; k++) {
+      const p = pil[k],
+        q = pil[(k + 1) % n];
+      if (p.broken || q.broken || k % 2) continue;
+      const y = Math.min(p.gy, q.gy) + 0.8 + 9 + 0.6;
+      b.add('ruin', beam(new V3(p.x, y + 0.35, p.z), new V3(q.x, y + 0.35, q.z), 0.7, 1.4), { color: '#cfc7b2', uvScale: 0.5, uv: 'world' });
+    }
+    // storm obelisks with floating crystals
+    this.arenaCrystals = [];
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * TAU + Math.PI / 4;
+      const x = A.x + Math.cos(a) * 17,
+        z = A.z + Math.sin(a) * 17;
+      b.add('marble', cyl(0.2, 0.9, 5.2, 4), { m: M(x, top, z, 0, a), color: '#e2dccb' });
+      b.add('gold', cyl(0.95, 0.95, 0.25, 4), { m: M(x, top + 0.6, z, 0, a), color: '#d9b45a' });
+      b.add('runeV', new THREE.OctahedronGeometry(0.55, 0), { m: M(x, top + 6.2, z, 0, a, 0, 1, 1.6, 1), color: '#6a4aa0', extra: 1.4 });
+      this.solids.addCircle(x, z, 0.9, top + 5.2);
+      this.arenaCrystals.push(new V3(x, top + 6.2, z));
+    }
+    b.build(this.mats, this.group);
+    this.solids.addCircle(A.x, A.z, R + 0.5, top);
+    this.terrain.addBlocker(A.x, A.z, R + 6);
+    this.area({ x: A.x, z: A.z, r: R + 4, soft: 2.5, grass: 0, color: '#8f8b7c' });
+    this.arena = { center: new V3(A.x, top, A.z), r: R, top };
+  }
+
+  // --------------------------------------------------------- domain gate
+  buildDomainGate() {
+    const D = LANDMARKS.domain;
+    const b = new Builder();
+    const y0 = this.terrain.heightAt(D.x, D.z);
+    const rot = Math.atan2(SPAWN.x - D.x, SPAWN.z - D.z);
+    const W = this.frame(D.x, y0, D.z, rot);
+    const at = (m) => W.clone().multiply(m);
+    b.add('marble', cyl(5.2, 5.6, 0.5, 40), { m: at(M(0, -0.1, 0)), color: '#e6e0d0' });
+    b.add('marble', cyl(4.6, 4.8, 0.3, 40), { m: at(M(0, 0.4, 0)), color: '#efe9da' });
+    for (const r of [2.4, 4.2]) {
+      const g = new THREE.TorusGeometry(r, 0.06, 4, 64);
+      g.rotateX(Math.PI / 2);
+      b.add('rune', g, { m: at(M(0, 0.71, 0)), color: '#2b6e66', extra: 1 });
+    }
+    for (let s = 0; s < 3; s++) b.add('marble', box(3.2, 0.25 + s * 0.2, 0.7), { m: at(M(0, -0.1, 5.4 + (2 - s) * 0.6)), color: '#ddd6c4' });
+    for (const sx of [-1, 1]) {
+      b.add('stone', box(1.0, 7.2, 1.0), { m: at(M(sx * 2.9, 0.7, -1.2)), color: '#d2cab6', uvScale: 0.5 });
+      b.add('gold', box(1.15, 0.3, 1.15), { m: at(M(sx * 2.9, 0.7, -1.2)), color: '#d9b45a' });
+      b.add('gold', box(1.15, 0.3, 1.15), { m: at(M(sx * 2.9, 7.6, -1.2)), color: '#d9b45a' });
+    }
+    const arch = new THREE.TorusGeometry(2.9, 0.42, 8, 32, Math.PI);
+    b.add('stone', arch, { m: at(M(0, 7.7, -1.2)), color: '#d8d0bc', uvScale: 0.5 });
+    const archG = new THREE.TorusGeometry(2.9, 0.12, 6, 32, Math.PI);
+    b.add('gold', archG, { m: at(M(0, 7.7, -0.75)), color: '#e2bd62' });
+    b.add('rune', new THREE.OctahedronGeometry(0.5, 0), { m: at(M(0, 11.1, -1.2, 0, 0, 0, 1, 1.5, 1)), color: '#2b6e66', extra: 1.4 });
+    b.build(this.mats, this.group);
+    const portal = this.portal(5.0, 7.4);
+    portal.position.copy(new V3(0, 4.4, -1.2).applyMatrix4(W));
+    portal.rotation.y = rot;
+    this.group.add(portal);
+    this.solids.addCircle(D.x, D.z, 5.4, y0 + 0.7);
+    for (const sx of [-1, 1]) {
+      const p = new V3(sx * 2.9, 0, -1.2).applyMatrix4(W);
+      this.solids.addCircle(p.x, p.z, 0.75, y0 + 8);
+    }
+    this.terrain.addBlocker(D.x, D.z, 8);
+    this.area({ x: D.x, z: D.z, r: 8, soft: 2, grass: 0.2, color: '#9c9888' });
+    this.domainGate = { pos: new V3(D.x, y0 + 0.7, D.z), portal, front: new V3(Math.sin(rot), 0, Math.cos(rot)), rot };
+  }
+
+  // ----------------------------------------------------- the floating realm
+  buildRealm() {
+    const D = DOMAIN_REALM;
+    const rand = mulberry32(5150);
+    const b = new Builder();
+    const y = D.y;
+    b.add('marble', cyl(D.r, D.r - 0.4, 1.0, 64), { m: M(D.x, y - 1.0, D.z), color: '#e6e0d2' });
+    // rocky underside
+    const under = new THREE.ConeGeometry(D.r - 0.3, 26, 24, 6, true);
+    under.rotateX(Math.PI);
+    const p = under.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const vy = p.getY(i);
+      const k = 1 + (Math.sin(i * 12.9898) * 43758.5453 - Math.floor(Math.sin(i * 12.9898) * 43758.5453) - 0.5) * 0.35 * (vy < 12 ? 1 : 0);
+      p.setX(i, p.getX(i) * k);
+      p.setZ(i, p.getZ(i) * k);
+    }
+    under.computeVertexNormals();
+    b.add('ruin', under, { m: M(D.x, y - 1.0 - 13, D.z), color: '#8c8576', uvScale: 0.2 });
+    for (let k = 0; k < 70; k++) {
+      const a = rand() * TAU,
+        r = 4 + Math.sqrt(rand()) * (D.r - 5);
+      const s = 1.4 + rand();
+      b.add('marble', box(s, 0.1, s), { m: M(D.x + Math.cos(a) * r, y - 0.04, D.z + Math.sin(a) * r, 0, rand() * TAU), color: '#efe9dc', tone: 0.9 + rand() * 0.15 });
+    }
+    for (const r of [3.5, 9, 15]) {
+      const g = new THREE.TorusGeometry(r, 0.08, 4, 96);
+      g.rotateX(Math.PI / 2);
+      b.add(r === 9 ? 'rune' : 'gold', g, { m: M(D.x, y + 0.02, D.z), color: r === 9 ? '#2b6e66' : '#d9b45a', extra: 1 });
+    }
+    // broken colonnade
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * TAU;
+      if (k === 0) continue; // the exit portal side
+      const x = D.x + Math.cos(a) * (D.r - 1.6),
+        z = D.z + Math.sin(a) * (D.r - 1.6);
+      const h = k % 3 === 1 ? 2.5 + rand() * 2 : 6.5;
+      b.add('marble', box(1.5, 0.5, 1.5), { m: M(x, y, z, 0, -a), color: '#ddd6c4' });
+      b.add('marble', cyl(0.5, 0.58, h, 14), { m: M(x, y + 0.5, z), color: '#f0eadc' });
+      if (h > 6) b.add('gold', box(1.4, 0.35, 1.4), { m: M(x, y + 0.5 + h, z, 0, -a), color: '#d9b45a' });
+      this.solids.addCircle(x, z, 0.75, y + 0.5 + h);
+    }
+    // floating islets around it
+    for (let k = 0; k < 9; k++) {
+      const a = rand() * TAU,
+        r = D.r + 8 + rand() * 22;
+      const s = 1.5 + rand() * 3.5;
+      b.add('ruin', new THREE.DodecahedronGeometry(s, 0), { m: M(D.x + Math.cos(a) * r, y - 6 + rand() * 18, D.z + Math.sin(a) * r, rand(), rand(), rand(), 1, 0.6, 1), color: '#a59e8c', uvScale: 0.3 });
+    }
+    b.build(this.mats, this.group);
+    // exit portal on the open side (local +x)
+    const portal = this.portal(3.4, 5.2);
+    portal.position.set(D.x + D.r - 2.2, y + 2.7, D.z);
+    portal.rotation.y = Math.PI / 2;
+    portal.material.uniforms.uOpen.value = 0;
+    this.group.add(portal);
+    this.solids.addCircle(D.x, D.z, D.r, y);
+    this.realm = { center: new V3(D.x, y, D.z), r: D.r, exit: portal, exitPos: new V3(D.x + D.r - 2.6, y, D.z) };
   }
 
   // ----------------------------------------------------------------- statue

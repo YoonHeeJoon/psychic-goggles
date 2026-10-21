@@ -37,8 +37,14 @@ Chromium screenshots, then commits.
 - [x] Weather: rain showers with wet ground and rainbows, thunderstorms at night
 - [x] Wildlife: birds that scatter, butterflies and fireflies, fish in the lake
 
-## Iteration 6 — challenges & bosses
-- [ ] Elemental puzzles (torches to light, wind pinwheels, timed trials) guarding exquisite chests
-- [ ] A boss arena: a giant elemental beast with phases, shield break and telegraphed attacks
-- [ ] Character level-ups / talents from gems, damage scaling and enemy levels by region
-- [ ] Domain-style challenge with a reward chest and a short cinematic intro
+## Iteration 6 — challenges & bosses ✅
+- [x] Elemental puzzles (torches to light, wind pinwheels, timed trials) guarding exquisite chests
+- [x] A boss arena: a giant elemental beast with phases, shield break and telegraphed attacks
+- [x] Character level-ups / talents from gems, damage scaling and enemy levels by region
+- [x] Domain-style challenge with a reward chest and a short cinematic intro
+
+## Iteration 7 — feel & finish
+- [ ] Gamepad support, rebindable keys, camera collision with trees and walls
+- [ ] Character switching flourish (swap VFX, voice-like chimes), elemental burst cut-in camera
+- [ ] Ambient music: procedural day / night / battle themes that cross-fade
+- [ ] Achievements / adventure log, photo mode

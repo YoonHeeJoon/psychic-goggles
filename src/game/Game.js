@@ -14,6 +14,11 @@ import { Bag, CookPanel, BuffBar } from '../ui/Panels.js';
 import { Dialogue } from '../ui/Dialogue.js';
 import { Quest } from './Quest.js';
 import { ITEMS } from './Items.js';
+import { Boss } from '../combat/Boss.js';
+import { BossUI } from '../ui/BossUI.js';
+import { Progression, CharPanel } from './Progression.js';
+import { Puzzles } from '../world/Puzzles.js';
+import { Domain } from './Domain.js';
 import { Grass } from '../world/Grass.js';
 import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
@@ -79,6 +84,7 @@ export class Game {
     this.ground = this.structures.ground;
     this.explore = new Exploration(this);
     this.gathering = new Gathering(this);
+    Puzzles.reserve(this.terrain);
     this.scene.add(this.terrain.buildMesh(q.terrainStep));
 
     loader.set(0.35, '하늘과 바다를 칠하는 중...');
@@ -100,10 +106,14 @@ export class Game {
     this.cameraCtl.yaw = 0;
     this.combat = new Combat(this);
     this.explore.build();
+    this.progression = new Progression(this);
     this.weather = new Weather(this);
     this.wildlife = new Wildlife(this);
     this.gathering.build();
     this.npcs = new NPCs(this);
+    this.boss = new Boss(this);
+    this.puzzles = new Puzzles(this);
+    this.domain = new Domain(this);
     this.buffs = { atk: 0, stamina: 0 };
 
     this.rendererW.setup(this.scene, this.camera);
@@ -118,6 +128,8 @@ export class Game {
     this.buffBar = new BuffBar(this.hud.layer);
     this.dialogue = new Dialogue(this, this.container);
     this.quest = new Quest(this);
+    this.bossUI = new BossUI(this.container);
+    this.charPanel = new CharPanel(this, this.container);
     if (TouchControls.wanted()) this.touch = new TouchControls(this);
     this.tpFade = document.createElement('div');
     this.tpFade.className = 'tp-fade';
@@ -151,6 +163,10 @@ export class Game {
       if (e.code === 'KeyB') {
         if (this.state === 'playing') this.openPanel(this.bag);
         else if (this.state === 'panel' && this.panel === this.bag) this.closePanel();
+      }
+      if (e.code === 'KeyC') {
+        if (this.state === 'playing') this.openPanel(this.charPanel);
+        else if (this.state === 'panel' && this.panel === this.charPanel) this.closePanel();
       }
       if (e.code === 'Escape' && this.state === 'map') this.closeMap();
       if (e.code === 'Escape' && this.state === 'panel') this.closePanel();
@@ -291,10 +307,80 @@ export class Game {
     const B = this.buffs;
     B.atk = Math.max(0, B.atk - dt);
     B.stamina = Math.max(0, B.stamina - dt);
-    this.combat.stats.atk = 1150 * (B.atk > 0 ? 1.2 : 1);
+    this.combat.atkBuff = B.atk > 0 ? 1.2 : 1;
     this.player.staminaMul = B.stamina > 0 ? 0.7 : 1;
     this.buffBar.update(B);
   }
+
+  // ---- boss
+  // short scripted camera shot: cam(t) fills `pos` / `look`, onEnd runs after
+  startCine(dur, cam, onEnd) {
+    if (this.state !== 'playing') return false;
+    this.state = 'cine';
+    this.cine = { t: 0, dur, cam, onEnd, pos: new THREE.Vector3(), look: new THREE.Vector3() };
+    this.input.enabled = false;
+    this.input.keys.clear();
+    this.hud.layer.classList.add('cine');
+    this.hud.setPrompt('');
+    this.explore.promptText = '';
+    if (this.combat.action) this.combat.endAction();
+    return true;
+  }
+
+  updateCine(dt) {
+    const c = this.cine;
+    c.t += dt;
+    const P = this.player;
+    P.model.root.position.copy(P.pos);
+    P.model.update(dt, { mode: 'idle', speed: 0 });
+    c.cam(c.t, c.pos, c.look);
+    this.camera.position.copy(c.pos);
+    this.camera.lookAt(c.look);
+    if (c.t > c.dur) {
+      this.state = 'playing';
+      this.input.enabled = true;
+      this.hud.layer.classList.remove('cine');
+      this.cameraCtl.pitch = 0.22;
+      this.cameraCtl.initialized = false;
+      this.clock.getDelta();
+      if (c.onEnd) c.onEnd();
+    }
+  }
+
+  bossIntro(boss) {
+    const a0 = Math.atan2(this.player.pos.x - boss.home.x, this.player.pos.z - boss.home.z);
+    const ok = this.startCine(
+      4.2,
+      (t, pos, look) => {
+        const a = a0 + t * 0.32;
+        const r = 15 - t * 0.8;
+        pos.set(boss.home.x + Math.sin(a) * r, boss.home.y + 2.5 + t * 0.6, boss.home.z + Math.cos(a) * r);
+        look.copy(boss.corePos);
+      },
+      () => (this.cameraCtl.yaw = Math.atan2(this.player.pos.x - boss.home.x, this.player.pos.z - boss.home.z))
+    );
+    if (!ok) return;
+    this.bossUI.showCard(boss.name, boss.title);
+    this.sfx.bossRoar();
+  }
+
+  onBossDefeated(boss) {
+    this.combat.hitStop = 0.3;
+    this.flashScreen('#f2deff', 0.55);
+    this.cameraCtl.shake(0.5, 0.7);
+    this.sfx.bossDeath();
+    const prog = this.explore.progress;
+    prog.bossKills = (prog.bossKills || 0) + 1;
+    setTimeout(() => {
+      this.hud.showBanner('도전 완료 · 뇌광의 결정체');
+      this.explore.spawnChest('boss:' + Date.now(), { x: boss.home.x, y: boss.home.y, z: boss.home.z + 3 }, 2, true);
+      this.gems += 100;
+      this.hud.toast('획득 · <b>별빛 결정</b> ×100', '#9fe8ff');
+      this.explore.save();
+    }, 2600);
+  }
+
+  onBossReset() {}
 
   // ---- dialogue
   talkTo(npc) {
@@ -422,10 +508,40 @@ export class Game {
     }, 520);
   }
 
+  // fade out, move the player, fade back in
+  warp(x, y, z, yaw, then) {
+    if (this.tpBusy) return;
+    this.tpBusy = true;
+    const P = this.player;
+    P.locked = true;
+    this.tpFade.classList.add('on');
+    this.sfx.teleport();
+    setTimeout(() => {
+      P.pos.set(x, y, z);
+      P.vel.set(0, 0, 0);
+      P.state = 'ground';
+      P.yaw = yaw;
+      P.lastSafe.copy(P.pos);
+      P.fallStartY = P.pos.y;
+      this.cameraCtl.yaw = yaw + Math.PI;
+      this.cameraCtl.pitch = 0.2;
+      this.cameraCtl.initialized = false;
+      this.hud.region = '';
+      setTimeout(() => {
+        this.tpFade.classList.remove('on');
+        P.locked = false;
+        this.tpBusy = false;
+        if (then) then();
+      }, 350);
+    }, 520);
+  }
+
   regionAt(x, z) {
+    if (this.domain && this.domain.inside) return '비경 · 바람 그림자 회랑';
     const d = (p) => Math.hypot(x - p.x, z - p.z);
     const h = this.terrain.heightAt(x, z);
     if (d(LANDMARKS.village) < 70) return '풍차 마을';
+    if (d(LANDMARKS.arena) < 45) return '뇌광의 결전장';
     if (d(LANDMARKS.ruins) < 45) return '잊힌 유적';
     if (d(LANDMARKS.giantTree) < 75) return '천년나무 언덕';
     if (d(LANDMARKS.lake) < 95) return '거울 호수';
@@ -635,11 +751,21 @@ export class Game {
     } else if (this.state === 'dialog') {
       this.combat.lateUpdate(0, dt);
       this.updateDialogCamera(dt);
+    } else if (this.state === 'cine') {
+      this.combat.lateUpdate(dt, dt);
+      this.updateCine(dt);
+    }
+    if (this.bossUI) {
+      const b = this.boss;
+      const show = b.aggro && b.alive && b.state !== 'dormant' && b.state !== 'intro' && this.state === 'playing';
+      this.bossUI.update(dt, b, show);
     }
     if (this.state === 'playing') this.updateBuffs(dt);
     if (this.state !== 'paused' && this.state !== 'loading') {
       this.gathering.update(dt);
       this.npcs.update(dt);
+      this.puzzles.update(dt);
+      this.domain.update(dt);
     }
     if (this.quest) this.quest.update();
     this.structures.update(dt, shared.uWindStrength.value);
@@ -687,6 +813,9 @@ export class Game {
       }
       this.explore.minimapMarkers(P, markers);
       this.gathering.minimapMarkers(P, markers);
+      this.puzzles.minimapMarkers(P, markers);
+      const B = this.boss;
+      if (B.alive && Math.abs(B.home.x - P.pos.x) < 110 && Math.abs(B.home.z - P.pos.z) < 110) markers.push({ x: B.home.x, z: B.home.z, color: '#c48bff', r: 6, pulse: B.aggro });
       this.npcs.minimapMarkers(P, markers);
       this.quest.minimapMarker(markers);
       this.hud.drawMinimap(P, this.cameraCtl.yaw, markers);

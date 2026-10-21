@@ -19,6 +19,8 @@ const LABELS = [
   { text: '속삭이는 숲', x: -260, z: -20, size: 0.85 },
   { text: '은빛 해안', x: 30, z: 360, size: 0.85 },
   { text: '별바람 평원', x: 210, z: -10, size: 0.9 },
+  { text: '뇌광의 결전장', x: LANDMARKS.arena.x - 6, z: LANDMARKS.arena.z + 40, size: 0.85 },
+  { text: '바람 그림자 회랑', x: LANDMARKS.domain.x, z: LANDMARKS.domain.z - 18, size: 0.75 },
 ];
 
 export class WorldMap {

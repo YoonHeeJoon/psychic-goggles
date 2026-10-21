@@ -73,6 +73,7 @@ export class WorldUI {
     }
 
     for (const e of enemies) {
+      if (e.isBoss) continue; // the boss has its own bar at the top of the screen
       const b = this.bars.get(e);
       const dist = Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z);
       const show = e.alive && (e.aggro || e.hp < e.maxHp) && dist < 40;

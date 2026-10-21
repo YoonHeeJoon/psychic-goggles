@@ -626,6 +626,47 @@ export class Sound {
     this.nz({ type: 'highpass', f: 5000, a: 0.3, d: 1.2, gain: 0.04, verb: 0.5 });
   }
 
+  torch() {
+    this.nz({ type: 'lowpass', f: 400, f2: 2200, q: 0.7, a: 0.05, d: 0.5, gain: 0.16, buf: 'brown' });
+    this.nz({ f: 3000, q: 2, d: 0.08, gain: 0.05, delay: 0.1 });
+  }
+
+  // ------------------------------------------------------------------ boss
+  bossCharge() {
+    this.tone({ type: 'sawtooth', f: 180, f2: 720, a: 0.05, d: 0.9, gain: 0.05, lp: 2200, verb: 0.3 });
+    this.nz({ f: 400, f2: 2600, q: 3, a: 0.4, d: 0.5, gain: 0.07 });
+  }
+  bossImpact(k = 1) {
+    if (!this.gate('bimp', 70)) return;
+    this.tone({ f: 120, f2: 35, d: 0.5 * k + 0.2, gain: 0.3 * k + 0.1 });
+    this.nz({ type: 'lowpass', f: 2200, f2: 200, d: 0.5 * k + 0.2, gain: 0.22 * k + 0.08, buf: 'brown' });
+    this.nz({ type: 'highpass', f: 3500, d: 0.15, gain: 0.08 * k });
+  }
+  bossBeam() {
+    this.tone({ type: 'square', f: 140, f2: 90, d: 0.45, gain: 0.06, lp: 2400 });
+    this.nz({ f: 2500, q: 0.8, d: 0.45, gain: 0.14 });
+    this.tone({ type: 'sawtooth', f: 880, f2: 440, d: 0.4, gain: 0.03, lp: 3000 });
+  }
+  bossShield() {
+    [0, 3, 7, 10].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(62 + n), a: 0.05, d: 0.8, gain: 0.04, delay: i * 0.06, verb: 0.5 }));
+    this.nz({ type: 'highpass', f: 3000, a: 0.2, d: 0.8, gain: 0.06, verb: 0.4 });
+  }
+  bossBreak() {
+    for (let i = 0; i < 10; i++) this.tone({ type: 'triangle', f: rnd(1800, 5200), d: rnd(0.1, 0.4), gain: 0.05, delay: i * 0.015 });
+    this.nz({ type: 'highpass', f: 2500, d: 0.5, gain: 0.2 });
+    this.tone({ f: 90, f2: 30, d: 0.8, gain: 0.3 });
+  }
+  bossRoar() {
+    this.tone({ type: 'sawtooth', f: 70, f2: 55, a: 0.15, d: 1.4, gain: 0.08, lp: 900, verb: 0.4 });
+    this.tone({ type: 'sawtooth', f: 105, f2: 82, a: 0.15, d: 1.4, gain: 0.05, lp: 1200, verb: 0.4 });
+    this.nz({ type: 'bandpass', f: 600, f2: 300, q: 0.8, a: 0.2, d: 1.2, gain: 0.12, buf: 'pink', verb: 0.3 });
+  }
+  bossDeath() {
+    this.bossBreak();
+    this.tone({ f: 60, f2: 25, a: 0.05, d: 2.5, gain: 0.3 });
+    [0, 4, 7, 12, 16].forEach((n, i) => this.tone({ type: 'triangle', f: NOTE(72 + n), a: 0.05, d: 1.4, gain: 0.04, delay: 0.6 + i * 0.12, verb: 0.7, bus: this.uiBus }));
+  }
+
   // ------------------------------------------------------------------ UI
   click() {
     this.tone({ f: 1300, f2: 1000, d: 0.05, gain: 0.05, bus: this.uiBus });

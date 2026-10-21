@@ -384,11 +384,17 @@ export class Combat {
   // ======================================================================
   // hits & damage
   // ======================================================================
+  // tell puzzles (braziers, pinwheels) where an element landed
+  emitElement(x, z, r, el) {
+    if (this.g.puzzles && el && el !== 'phys') this.g.puzzles.onElement(x, z, r, el);
+  }
+
   meleeHit(a) {
     const P = this.player;
     const fx = Math.sin(P.yaw),
       fz = Math.cos(P.yaw);
     const range = a.range ?? 2.8;
+    this.emitElement(P.pos.x + fx * range * 0.5, P.pos.z + fz * range * 0.5, range * 0.6, a.el);
     let any = false;
     for (const e of this.enemies.near(P.pos.x + fx * 0.5, P.pos.z + fz * 0.5, range)) {
       const dx = e.pos.x - P.pos.x,
@@ -443,6 +449,7 @@ export class Combat {
       }
       const gh = this.g.terrain.heightAt(p.pos.x, p.pos.z);
       if (hit || p.life <= 0 || p.pos.y < gh) {
+        this.emitElement(p.pos.x, p.pos.z, 1.2, p.el);
         if (hit) this.damage(hit, { mult: p.mult, el: p.el, knock: 1.2, dir: [p.vel.x / 16, p.vel.z / 16] });
         this.vfx.burst(p.pos, p.color, 12, { speed: 4, size: 0.18, life: 0.4 });
         this.vfx.removeObj(p.mesh);
@@ -489,8 +496,13 @@ export class Combat {
       this.g.sfx.reaction('shatter');
       this.vfx.burst(center, '#e8fbff', 30, { speed: 8, size: 0.25, life: 0.6 });
     }
+    // character attack, talent level for skills/bursts, and the level gap
+    const cur = this.player.current;
+    if (this.action && this.action.kind === 'skill') mult *= cur.skillMul || 1;
+    else if (this.action && this.action.kind === 'burst') mult *= cur.burstMul || 1;
+    const lvF = clamp(1 + ((cur.level || 20) - (e.level || 20)) * 0.02, 0.6, 1.5);
     const crit = !h.noCrit && Math.random() < this.stats.critRate;
-    let dmg = this.stats.atk * mult * rmult * (crit ? 1 + this.stats.critDmg : 1) * (0.93 + Math.random() * 0.14);
+    let dmg = this.atk() * mult * rmult * lvF * (crit ? 1 + this.stats.critDmg : 1) * (0.93 + Math.random() * 0.14);
     if (el === 'phys' && e.superT > 0) dmg *= 1.4;
     dmg = Math.max(1, Math.round(dmg));
     let knock = null;
@@ -509,10 +521,14 @@ export class Combat {
     return reaction;
   }
 
+  atk() {
+    return (this.player.current.atk || this.stats.atk) * (this.atkBuff || 1);
+  }
+
   rawDamage(e, mult, el, color) {
     if (!e.alive) return;
     const center = e.center(new THREE.Vector3());
-    const dmg = Math.round(this.stats.atk * mult * (0.95 + Math.random() * 0.1));
+    const dmg = Math.round(this.atk() * mult * (0.95 + Math.random() * 0.1));
     e.hit(dmg, null, 0);
     this.ui.text(center.clone().setY(center.y + e.height * 0.45 + Math.random() * 0.3), String(dmg), color || ELEMENT_COLORS[el], {});
   }
@@ -564,6 +580,7 @@ export class Combat {
 
   aoe(x, z, r, h) {
     const out = [];
+    this.emitElement(x, z, r, h.el);
     for (const e of this.enemies.near(x, z, r)) {
       const dx = e.pos.x - x,
         dz = e.pos.z - z;
@@ -605,7 +622,7 @@ export class Combat {
       return;
     }
     const c = P.current;
-    dmg = Math.round(dmg * (0.9 + Math.random() * 0.2));
+    dmg = Math.round(dmg * (0.9 + Math.random() * 0.2) * (c.defMul || 1));
     c.hp = Math.max(0, c.hp - dmg);
     this.g.sfx.hurt();
     this.ui.text(_a.set(P.pos.x, P.pos.y + 1.8, P.pos.z), String(dmg), '#ff6060', {});

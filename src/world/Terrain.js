@@ -25,7 +25,12 @@ export const LANDMARKS = {
   statue: { x: 40, z: -10 },
   village: { x: -185, z: 185, r: 46, h: 19 },
   ruins: { x: -265, z: -95, r: 34, h: 17.5 },
+  arena: { x: 368, z: -45, r: 30, h: 20 },
+  domain: { x: -80, z: -90, r: 12, h: 19 },
 };
+
+// The challenge domain is a floating platform far out over the northern sea.
+export const DOMAIN_REALM = { x: 0, z: -1350, y: 140, r: 19 };
 
 const C = (hex) => new THREE.Color(hex);
 const PAL = {
@@ -157,6 +162,12 @@ export class Terrain {
     h = lerp(h, vh, smoothstep(LANDMARKS.village.r + 30, LANDMARKS.village.r, vd));
     const rd = Math.hypot(x - LANDMARKS.ruins.x, z - LANDMARKS.ruins.z);
     h = lerp(h, LANDMARKS.ruins.h + N.fbm(x * 0.03, z * 0.03, 2) * 0.7, smoothstep(LANDMARKS.ruins.r + 22, LANDMARKS.ruins.r, rd));
+
+    // boss arena on the eastern cliffs, domain gate clearing
+    const ad = Math.hypot(x - LANDMARKS.arena.x, z - LANDMARKS.arena.z);
+    h = lerp(h, LANDMARKS.arena.h, smoothstep(LANDMARKS.arena.r + 22, LANDMARKS.arena.r, ad));
+    const dd = Math.hypot(x - LANDMARKS.domain.x, z - LANDMARKS.domain.z);
+    h = lerp(h, LANDMARKS.domain.h, smoothstep(LANDMARKS.domain.r + 14, LANDMARKS.domain.r, dd));
 
     // spawn meadow: gentle rolling
     const sd = Math.hypot(x - SPAWN.x, z - SPAWN.z);

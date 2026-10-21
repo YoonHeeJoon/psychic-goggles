@@ -499,7 +499,7 @@ export class Exploration {
       else consider(wp.pos, 3.0, '지도 열기 · 순간이동', () => this.g.openMap(wp));
     }
     // villagers, pickable plants, cooking pots, quest spots
-    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest]) if (prov) prov.consider(P.pos, consider);
+    for (const prov of [this.g.npcs, this.g.gathering, this.g.quest, this.g.puzzles, this.g.domain]) if (prov) prov.consider(P.pos, consider);
     const st = this.S.statue;
     const d = Math.hypot(P.pos.x - st.center.x, P.pos.z - st.center.z);
     if (d < 9 && d < bd && P.pos.y < st.center.y + 4) best = { label: '바람의 수호상 · 기도하기', act: () => this.pray() };
@@ -540,11 +540,30 @@ export class Exploration {
     }
   }
 
+  // a reward chest that appears with a flourish (puzzles, boss, domain)
+  spawnChest(id, pos, tier, temp = false) {
+    if (!temp && this.progress.chests.includes(id)) return null;
+    if (this.chests.some((c) => c.id === id)) return null;
+    const chest = this.buildChest(tier);
+    const y = pos.y !== undefined ? pos.y : this.g.ground.heightAt(pos.x, pos.z);
+    chest.group.position.set(pos.x, y, pos.z);
+    const P = this.g.player.pos;
+    chest.group.rotation.y = Math.atan2(P.x - pos.x, P.z - pos.z);
+    this.group.add(chest.group);
+    const entry = { id, tier, temp, ...chest, x: pos.x, z: pos.z, pos: new V3(pos.x, y, pos.z), opened: false, t: 0, sealed: false };
+    this.chests.push(entry);
+    this.beam(entry.pos.clone(), TIERS[tier].glow, 9, 0.6, 1.6);
+    this.vfx.burst(entry.pos.clone().add(new V3(0, 0.6, 0)), TIERS[tier].glow, 30, { speed: 5, size: 0.24, life: 0.8, up: 1.2, gravity: 4 });
+    this.vfx.ring(entry.pos.clone().add(new V3(0, 0.15, 0)), TIERS[tier].glow, 2.6, 0.6);
+    this.g.sfx.unseal();
+    return entry;
+  }
+
   openChest(c) {
     if (c.opened) return;
     c.opened = true;
     c.t = 0;
-    this.progress.chests.push(c.id);
+    if (!c.temp) this.progress.chests.push(c.id);
     const T = TIERS[c.tier];
     const top = _v.copy(c.pos).add(new V3(0, 0.8, 0)).clone();
     this.vfx.burst(top, T.glow, 30 + c.tier * 20, { speed: 6, size: 0.24, life: 0.9, up: 1.4, gravity: 5 });
@@ -659,7 +678,7 @@ export class Exploration {
       orbs: this.progress.orbs.length,
       orbTotal: this.orbSpots.length,
       chests: this.progress.chests.length,
-      chestTotal: this.chestSpots.length,
+      chestTotal: this.chestSpots.length + (this.g.puzzles ? this.g.puzzles.list.length : 0),
       blessing: this.blessing,
       held: this.progress.held,
     };

@@ -342,14 +342,14 @@ export class Enemy {
     this.selfEl = el;
     this.level = level;
     this.home = V3(x, 0, z);
-    this.pos = V3(x, mgr.terrain.heightAt(x, z), z);
+    this.pos = V3(x, mgr.ground.heightAt(x, z), z);
     this.home.y = this.pos.y;
     this.vel = V3(0, 0, 0);
     this.yaw = Math.random() * Math.PI * 2;
     this.model = type === 'slime' ? buildSlime(el) : buildGoblin();
     this.radius = this.model.radius;
     this.height = this.model.height;
-    this.maxHp = type === 'slime' ? 9200 : 17500;
+    this.maxHp = Math.round((type === 'slime' ? 9200 : 17500) * (1 + (level - 18) * 0.05));
     this.hp = this.maxHp;
     this.alive = true;
     this.state = 'idle';
@@ -459,7 +459,7 @@ export class Enemy {
   }
 
   update(dt, player) {
-    const T = this.mgr.terrain;
+    const T = this.mgr.ground;
     this.t += dt;
     if (!this.alive) {
       this.deadT += dt;
@@ -785,6 +785,7 @@ export class EnemyManager {
     this.game = game;
     this.scene = game.scene;
     this.terrain = game.terrain;
+    this.ground = game.ground || game.terrain; // terrain + walkable structures
     this.colliders = game.vegetation.colliders;
     this.list = [];
     this.listeners = {};
@@ -802,7 +803,10 @@ export class EnemyManager {
           z = g.z + Math.sin(a) * r;
           tries++;
         } while (tries < 20 && (this.terrain.heightAt(x, z) < 0.6 || this.terrain.normalAt(x, z).y < 0.8));
-        this.list.push(new Enemy(this, kind, el, x, z, 16 + Math.floor(rand() * 6)));
+        // stronger the further from the meadow where the journey starts
+        const far = Math.hypot(g.x - SPAWN.x, g.z - SPAWN.z);
+        const lv = Math.min(34, Math.max(15, 14 + Math.round(far / 26) + Math.floor(rand() * 3)));
+        this.list.push(new Enemy(this, kind, el, x, z, lv));
       });
     }
   }
@@ -816,7 +820,28 @@ export class EnemyManager {
 
   onDeath(e) {
     this.emit('death', e);
-    this.respawnQueue.push({ e, t: 60 });
+    if (!e.isBoss && !e.temp) this.respawnQueue.push({ e, t: 60 });
+  }
+
+  // summoned / wave enemies that never respawn
+  spawn(kind, el, x, z, level) {
+    const e = new Enemy(this, kind, el, x, z, level);
+    e.temp = true;
+    e.aggro = true;
+    this.list.push(e);
+    return e;
+  }
+
+  remove(e) {
+    const i = this.list.indexOf(e);
+    if (i >= 0) this.list.splice(i, 1);
+    this.scene.remove(e.model.root);
+    const ui = this.game.combat && this.game.combat.ui;
+    const b = ui && ui.bars.get(e);
+    if (b) {
+      b.el.remove();
+      ui.bars.delete(e);
+    }
   }
   onChargedTick(e) {
     this.emit('chargedTick', e);
