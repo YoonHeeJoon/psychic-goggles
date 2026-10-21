@@ -63,6 +63,8 @@ export class Player {
     this.events = [];
     this.switchCd = 0;
     this.animOverride = null;
+    this.locked = false;
+    this.forced = null;
   }
 
   get current() {
@@ -79,9 +81,9 @@ export class Player {
     this.events.push({ type, ...data });
   }
 
-  switchTo(i) {
+  switchTo(i, force = false) {
     if (i === this.active || i < 0 || i >= this.party.length) return false;
-    if (this.switchCd > 0 || this.party[i].hp <= 0) return false;
+    if (!force && (this.switchCd > 0 || this.party[i].hp <= 0)) return false;
     const prev = this.model;
     this.active = i;
     prev.root.visible = false;
@@ -103,12 +105,11 @@ export class Player {
   }
 
   update(dt, input, camYaw) {
-    this.events.length = 0;
     this.switchCd = Math.max(0, this.switchCd - dt);
     for (let k = 0; k < 4; k++) if (input.hit('Digit' + (k + 1))) this.switchTo(k);
     if (input.hit('ControlLeft') || input.hit('KeyZ')) this.walk = !this.walk;
 
-    const mv = input.moveVector();
+    const mv = this.locked ? { x: 0, y: 0 } : input.moveVector();
     const fx = -Math.sin(camYaw),
       fz = -Math.cos(camYaw);
     const rx = Math.cos(camYaw),
@@ -171,7 +172,7 @@ export class Player {
 
   // ---------------------------------------------------------------- ground
   updateGround(dt, input, wish, moving, wishYaw, wishLen) {
-    const sprintKey = input.down('ShiftLeft') || input.down('ShiftRight') || input.mouseButtons.has(2);
+    const sprintKey = !this.locked && (input.down('ShiftLeft') || input.down('ShiftRight') || input.mouseButtons.has(2));
     this.sprinting = moving && sprintKey && !this.exhausted && this.stamina > 0;
     let target = 0;
     if (moving) target = this.sprinting ? SPRINT : this.walk ? WALK : RUN * Math.max(0.35, wishLen);
@@ -187,6 +188,11 @@ export class Player {
     this.vel.x = damp(this.vel.x, dirX * target, moving ? 10 : 14, dt);
     this.vel.z = damp(this.vel.z, dirZ * target, moving ? 10 : 14, dt);
     this.vel.y = 0;
+    if (this.forced && this.forced.t > 0) {
+      this.vel.x = this.forced.x;
+      this.vel.z = this.forced.z;
+      this.forced.t -= dt;
+    }
 
     const nx = this.pos.x + this.vel.x * dt;
     const nz = this.pos.z + this.vel.z * dt;
@@ -222,7 +228,7 @@ export class Player {
     }
     this.pos.y = gh;
 
-    if (input.hit('Space')) {
+    if (!this.locked && input.hit('Space')) {
       this.vel.y = 7.6;
       this.state = 'air';
       this.fallStartY = this.pos.y;
@@ -261,9 +267,9 @@ export class Player {
       return;
     }
     // wall in front -> climb
-    if (moving && this.tryWallAhead(wish)) return;
+    if (moving && !this.locked && this.tryWallAhead(wish)) return;
     // open glider
-    if (input.hit('Space') && this.vel.y < 1 && this.pos.y - gh > 2.2 && this.stamina > 1 && !this.exhausted) {
+    if (!this.locked && input.hit('Space') && this.vel.y < 1 && this.pos.y - gh > 2.2 && this.stamina > 1 && !this.exhausted) {
       this.state = 'glide';
       this.emit('glide');
     }

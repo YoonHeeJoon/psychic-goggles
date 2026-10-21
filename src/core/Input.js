@@ -33,12 +33,22 @@ export class Input {
     dom.addEventListener('mousedown', (e) => {
       if (!this.enabled) return;
       this.mouseButtons.add(e.button);
-      this.mousePressed.add(e.button);
-      if (!this.locked && !this.dragMode) this.requestLock();
-      if (this.dragMode) this.dragging = true;
+      if (!this.locked && !this.dragMode) {
+        // first click only captures the mouse
+        this.requestLock();
+        return;
+      }
+      if (this.dragMode) {
+        // in drag mode a short click attacks, a drag turns the camera
+        this.dragging = true;
+        this.downAt = performance.now();
+        this.dragDist = 0;
+        if (e.button !== 0) this.mousePressed.add(e.button);
+      } else this.mousePressed.add(e.button);
     });
     window.addEventListener('mouseup', (e) => {
       this.mouseButtons.delete(e.button);
+      if (this.dragMode && this.dragging && e.button === 0 && performance.now() - this.downAt < 260 && this.dragDist < 8) this.mousePressed.add(0);
       this.dragging = false;
     });
     window.addEventListener('mousemove', (e) => {
@@ -46,6 +56,7 @@ export class Input {
       if (this.locked || (this.dragMode && this.dragging)) {
         this.mouseDX += e.movementX || 0;
         this.mouseDY += e.movementY || 0;
+        if (this.dragging) this.dragDist += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
       }
     });
     dom.addEventListener(

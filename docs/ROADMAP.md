@@ -12,12 +12,12 @@ Chromium screenshots, then commits.
 - [x] Run / sprint / jump / glide / climb / swim, stamina, camera
 - [x] HUD: minimap, party, HP, skills, stamina wheel, banners, menus
 
-## Iteration 2 — combat
-- [ ] Normal attack combos per weapon (sword, claymore, polearm, catalyst) with slash VFX
-- [ ] Elemental skill (E) and burst (Q) per character, cooldowns, energy particles
-- [ ] Enemies: elemental slimes + masked goblin camp, AI, HP bars, aura icons
-- [ ] Elemental reactions (vaporize, melt, overload, freeze, charged, superconduct, swirl)
-- [ ] Damage numbers, hit-stop, camera shake, death/respawn
+## Iteration 2 — combat ✅
+- [x] Normal attack combos per weapon (sword, claymore, polearm, catalyst) with blade trails
+- [x] Elemental skill (E) and burst (Q) per character, cooldowns, energy particles
+- [x] Enemies: elemental slimes + masked goblins, AI, HP bars, aura icons, gem drops, respawn
+- [x] Elemental reactions (vaporize, melt, overload, freeze, charged, superconduct, swirl, shatter)
+- [x] Damage numbers, hit-stop, camera shake, plunge attack, dash i-frames, party down/revive
 
 ## Iteration 3 — exploration content
 - [ ] Teleport waypoints, guardian statue, ruins, windmill village

@@ -112,8 +112,8 @@ export class HUD {
     this.help = el(
       'div',
       'help',
-      `<div><b>WASD</b> 이동 · <b>Shift</b> 질주 · <b>Space</b> 점프/활공 · <b>마우스</b> 시점</div>
-       <div><b>1-4</b> 캐릭터 교체 · <b>Ctrl</b> 걷기 · <b>X</b> 등반 중 손 놓기 · <b>휠</b> 줌 · <b>H</b> 도움말</div>`
+      `<div><b>좌클릭</b> 공격 · <b>E</b> 원소 스킬 · <b>Q</b> 원소 폭발 · <b>공중 좌클릭</b> 낙하 공격</div>
+       <div><b>WASD</b> 이동 · <b>Shift</b> 질주(회피) · <b>Space</b> 점프/활공 · <b>1-4</b> 교체 · <b>H</b> 도움말</div>`
     );
     L.appendChild(this.help);
 
@@ -349,9 +349,8 @@ export class Menus {
           .map(([k, v]) => `<button data-q="${k}" class="q-btn">${v.label}</button>`)
           .join('')}</div>
         <div class="controls">
-          <div><b>WASD</b> 이동</div><div><b>Shift</b> 질주</div><div><b>Space</b> 점프 · 공중에서 활공</div>
-          <div><b>마우스</b> 시점 회전</div><div><b>휠</b> 줌</div><div><b>1-4</b> 캐릭터 교체</div>
-          <div><b>절벽으로 이동</b> 등반</div><div><b>Esc</b> 메뉴</div>
+          <div><b>WASD</b> 이동</div><div><b>Shift</b> 질주 · 회피</div><div><b>Space</b> 점프 · 공중에서 활공</div><div><b>절벽으로 이동</b> 등반</div>
+          <div><b>좌클릭</b> 일반 공격</div><div><b>E</b> 원소 스킬</div><div><b>Q</b> 원소 폭발</div><div><b>1-4</b> 캐릭터 교체</div>
         </div>
       </div>
       <div class="title-foot">Three.js로 만든 오리지널 오픈월드 · 모든 캐릭터와 지역은 창작물입니다</div>`

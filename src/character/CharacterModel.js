@@ -1097,7 +1097,13 @@ export class CharacterModel {
       hipsY = -0.004 * b;
       blend = 6;
     }
-    if (st.override) st.override(P, this);
+    if (st.override) {
+      const r = st.override(P, this);
+      if (r) {
+        if (r.blend) blend = r.blend;
+        if (r.hipsY !== undefined) hipsY = r.hipsY;
+      }
+    }
 
     const a = 1 - Math.exp(-dt * blend);
     const q = this._q || (this._q = new THREE.Quaternion());
@@ -1160,3 +1166,5 @@ export class CharacterModel {
     }
   }
 }
+
+export { lathe, smooth, strand, withGrad };

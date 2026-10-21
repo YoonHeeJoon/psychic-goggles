@@ -11,6 +11,7 @@ import { Player } from '../character/Player.js';
 import { CameraController } from './CameraController.js';
 import { HUD, Menus } from '../ui/HUD.js';
 import { ELEMENTS } from '../character/characters.js';
+import { Combat } from '../combat/Combat.js';
 import { damp } from '../core/noise.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -24,6 +25,9 @@ export class Game {
     this.gems = 0;
     this.fpsAcc = 0;
     this.fpsN = 0;
+    // debug: fixed timestep (?dt=0.033) for deterministic captures
+    const fdt = parseFloat(new URLSearchParams(location.search).get('dt'));
+    this.fixedDt = fdt > 0 && fdt < 0.2 ? fdt : 0;
   }
 
   async init() {
@@ -59,6 +63,7 @@ export class Game {
     this.player = new Player(this);
     this.cameraCtl = new CameraController(this.camera, this.terrain);
     this.cameraCtl.yaw = 0;
+    this.combat = new Combat(this);
 
     this.rendererW.setup(this.scene, this.camera);
     this.hud = new HUD(this.container);
@@ -212,8 +217,15 @@ export class Game {
     m.root.rotation.y = Math.atan2(x - this.player.pos.x, z - this.player.pos.z) * 0.6 + this.player.yaw * 0.4;
   }
 
+  flashScreen(color, amount = 0.3) {
+    const u = this.rendererW.grade.uniforms;
+    u.uFlashColor.value.set(color);
+    u.uFlash.value = Math.max(u.uFlash.value, amount);
+  }
+
   handleEvents() {
     for (const e of this.player.events) {
+      this.combat.onPlayerEvent(e);
       if (e.type === 'switch') {
         const p = this.player.current;
         this.hud.setActive(this.player.party, this.player.active);
@@ -230,11 +242,22 @@ export class Game {
         this.cameraCtl.shake(0.12, 0.2);
       }
     }
+    this.player.events.length = 0;
+  }
+
+  // debug helper: advance the simulation n frames without rendering
+  step(n = 1, dt = 1 / 30, keys = []) {
+    for (const k of keys) this.input.pressed.add(k);
+    for (let i = 0; i < n; i++) {
+      this.update(dt);
+      this.input.endFrame();
+    }
   }
 
   loop() {
     requestAnimationFrame(() => this.loop());
-    const dt = Math.min(this.clock.getDelta(), 1 / 20);
+    const real = Math.min(this.clock.getDelta(), 1 / 20);
+    const dt = this.fixedDt || real;
     this.frame++;
     this.update(dt);
     this.rendererW.render();
@@ -246,11 +269,20 @@ export class Game {
     const P = this.player;
     if (this.state === 'title') {
       this.updateTitleCamera(dt);
+      this.combat.lateUpdate(dt, dt);
     } else if (this.state === 'playing') {
-      P.update(dt, this.input, this.cameraCtl.yaw);
+      const C = this.combat;
+      const stop = C.hitStop > 0;
+      C.hitStop = Math.max(0, C.hitStop - dt);
+      const gdt = stop ? dt * 0.06 : dt;
+      C.update(gdt, this.input);
+      P.update(gdt, this.input, this.cameraCtl.yaw);
       this.cameraCtl.update(dt, this.input, P);
       this.handleEvents();
+      C.lateUpdate(gdt, dt);
     }
+    const gu = this.rendererW.grade.uniforms;
+    gu.uFlash.value = Math.max(0, gu.uFlash.value - dt * 2.2);
     if (this.state !== 'paused') this.env.update(dt, P.pos);
     this.env.followCamera(this.camera);
     this.water.update(this.camera);
@@ -278,7 +310,13 @@ export class Game {
       region: this.frame % 15 === 0 ? this.regionAt(P.pos.x, P.pos.z) : null,
       gems: this.gems,
     });
-    if (this.frame % 2 === 0) this.hud.drawMinimap(P, this.cameraCtl.yaw, this.markers || []);
+    if (this.frame % 2 === 0) {
+      const markers = [];
+      for (const e of this.combat.enemies.list) {
+        if (e.alive && Math.abs(e.pos.x - P.pos.x) < 60 && Math.abs(e.pos.z - P.pos.z) < 60) markers.push({ x: e.pos.x, z: e.pos.z, color: '#ff5a4a', r: 3 });
+      }
+      this.hud.drawMinimap(P, this.cameraCtl.yaw, markers);
+    }
     this.fpsAcc += dt;
     this.fpsN++;
     if (this.fpsAcc > 0.5) {
