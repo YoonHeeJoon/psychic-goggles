@@ -1,0 +1,30 @@
+{
+  "name": "starwind",
+  "version": "1.0.0",
+  "description": "Genshin-style open world action RPG built with Three.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:single": "vite build --mode single",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YoonHeeJoon/psychic-goggles.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/YoonHeeJoon/psychic-goggles/issues"
+  },
+  "homepage": "https://github.com/YoonHeeJoon/psychic-goggles#readme",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.5",
+    "vite-plugin-singlefile": "^2.3.4"
+  },
+  "type": "module"
+}
