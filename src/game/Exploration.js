@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { LANDMARKS, SPAWN } from '../world/Terrain.js';
+import { LANDMARKS, SPAWN, CAMPS, BRIDGE, PORT_LEN, portWorld } from '../world/Terrain.js';
 import { toonMaterial } from '../render/materials.js';
 import { NOISE_GLSL, shared } from '../render/shaders.js';
 import { smoothstep } from '../core/noise.js';
@@ -175,6 +175,15 @@ export class Exploration {
       const u = UPDRAFTS[k];
       spots.push({ id: 'u' + k, x: u.x, z: u.z, upTop: k });
     }
+    // autumn highlands: lighthouse lantern room, a watchtower roof, the bridge
+    if (S.lighthouse) spots.push({ id: 'lighthouse', x: S.lighthouse.x, z: S.lighthouse.z, y: S.lighthouse.y + 3.6 });
+    if (CAMPS[1].tower) spots.push({ id: 'towerB', x: CAMPS[1].tower.x, z: CAMPS[1].tower.z, y: CAMPS[1].tower.y + 4.6 });
+    if (S.bridge) {
+      const m = S.bridge.deck(0.5);
+      spots.push({ id: 'bridge', x: m.x, z: m.z, y: m.y + 2.2 });
+    }
+    const top = S.port && S.port.lots[0];
+    if (top) spots.push({ id: 'portRoof', x: top.x, z: top.z, y: S.houses.find((h) => Math.hypot(h.x - top.x, h.z - top.z) < 0.5).top + 1.3 });
     this.orbSpots = spots;
 
     // chests
@@ -196,6 +205,12 @@ export class Exploration {
       { id: 'c-beach', tier: 0, x: 0, z: 345 },
       { id: 'c-east', tier: 1, x: 203, z: 82 },
       { id: 'c-gate', tier: 0, x: 61, z: -93 },
+      { id: 'c-campA', tier: 2, x: CAMPS[0].x - 2.5, z: CAMPS[0].z + 7, guard: { x: CAMPS[0].x, z: CAMPS[0].z, r: 20 } },
+      { id: 'c-campB', tier: 2, x: CAMPS[1].x + 1.5, z: CAMPS[1].z - 7, guard: { x: CAMPS[1].x, z: CAMPS[1].z, r: 20 } },
+      { id: 'c-bridge', tier: 0, x: BRIDGE.ax - 9, z: BRIDGE.az - 7 },
+      { id: 'c-port', tier: 1, x: portWorld(PORT_LEN + 10, -13.5)[0], z: portWorld(PORT_LEN + 10, -13.5)[1] },
+      { id: 'c-maple', tier: 1, x: 214, z: 296 },
+      { id: 'c-cliffs', tier: 1, x: 294, z: 260, guard: { x: 294, z: 260, r: 18 } },
     ];
     for (const c of this.chestSpots) this.terrain.addBlocker(c.x, c.z, 2.5);
     for (const u of UPDRAFTS) this.terrain.addBlocker(u.x, u.z, 4);

@@ -493,7 +493,7 @@ export class Vegetation {
   buildTreeTypes() {
     const rand = mulberry32(11);
     const trunkCol = new THREE.Color('#6b4a33');
-    const leafCol = new THREE.Color('#5fa83a');
+    const leafColG = new THREE.Color('#5fa83a');
     this.types = [];
     const a2c = this.q.msaa > 0;
     this.leafMat = foliageMaterial({ leaf: true, leafTex: this.leafTex, wrap: 0.6, trans: 0.55, sway: 1, flutter: 1, a2c });
@@ -503,9 +503,12 @@ export class Vegetation {
     this.rockMat = foliageMaterial({ wrap: 0.3, sway: 0, rock: true });
     this.leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: this.leafTex, alphaTest: 0.5 });
 
-    // three broadleaf variants
-    for (let v = 0; v < 3; v++) {
-      const h = 3.6 + v * 0.7 + rand();
+    // three broadleaf variants, then three maples for the autumn highlands
+    const MAPLES = ['#d65a2a', '#e39a2f', '#c23b2b'];
+    for (let v = 0; v < 6; v++) {
+      const maple = v >= 3;
+      const leafCol = maple ? new THREE.Color(MAPLES[v - 3]) : leafColG;
+      const h = (maple ? 4.0 : 3.6) + (v % 3) * 0.7 + rand();
       const lean = (rand() - 0.5) * 0.6;
       const trunkPts = [
         new THREE.Vector3(0, -0.3, 0),
@@ -515,8 +518,8 @@ export class Vegetation {
       ];
       const geos = [taperedTube(trunkPts, 0.36, 0.14, 8, 8, trunkCol)];
       const cc = new THREE.Vector3(lean, h + 1.4, 0);
-      const blobs = [{ c: cc.clone().add(new THREE.Vector3(0, 0.5, 0)), r: 2.1 + rand() * 0.4 }];
-      const nb = 5 + Math.floor(rand() * 3);
+      const blobs = [{ c: cc.clone().add(new THREE.Vector3(0, 0.5, 0)), r: (maple ? 2.4 : 2.1) + rand() * 0.4 }];
+      const nb = (maple ? 6 : 5) + Math.floor(rand() * 3);
       for (let i = 0; i < nb; i++) {
         const a = (i / nb) * Math.PI * 2 + rand();
         const d = 1.4 + rand() * 0.6;
@@ -537,7 +540,8 @@ export class Vegetation {
       const trunk = mergeGeometries(geos.map((g) => g.toNonIndexed ? g : g));
       const leaves = leafCards(blobs, cc, rand, leafCol, 1.7, 10);
       const core = blobCore(blobs, cc, leafCol);
-      this.types.push({ kind: 'broad', trunk, leaves, core, radius: 0.45, height: h + 3.5 });
+      if (maple) (this.maples || (this.maples = [])).push({ kind: 'maple', trunk, leaves, core, radius: 0.45, height: h + 3.5 });
+      else this.types.push({ kind: 'broad', trunk, leaves, core, radius: 0.45, height: h + 3.5 });
     }
 
     // pine variant
@@ -593,6 +597,11 @@ export class Vegetation {
         leaves: leafCards(blobs, cc, rand, bushCol, 0.9, 16),
         core: blobCore(blobs, cc, bushCol),
       };
+      const autCol = new THREE.Color('#c9642c');
+      this.autumnBush = {
+        leaves: leafCards(blobs, cc, rand, autCol, 0.9, 16),
+        core: blobCore(blobs, cc, autCol),
+      };
     }
   }
 
@@ -613,8 +622,10 @@ export class Vegetation {
     const t = this.terrain;
     const mul = this.q.trees;
     const broad = [[], [], []];
+    const maples = [[], [], []];
     const pines = [];
     const bushes = [];
+    const aBushes = [];
     const occupied = new Map();
     const occKey = (x, z) => Math.floor(x / 5) * 10007 + Math.floor(z / 5);
     const tryOcc = (x, z) => {
@@ -634,16 +645,18 @@ export class Vegetation {
       const h = t.heightAt(x, z);
       const forest = t.forestAt(x, z);
       const alpine = smoothstep(40, 70, h);
-      let p = forest * 0.55 + 0.012;
+      const autumn = t.autumnAt(x, z);
+      let p = forest * 0.55 + 0.012 + autumn * (0.05 + forest * 0.2);
       if (rand() > p + alpine * 0.25) continue;
       if (!this.canPlant(x, z, alpine > 0.5 ? 0.0 : 0.35)) continue;
       if (h > 125) continue;
       if (!tryOcc(x, z)) continue;
-      const isPine = rand() < alpine * 0.9 + (forest > 0.5 ? 0.12 : 0.0);
+      const isPine = rand() < (alpine * 0.9 + (forest > 0.5 ? 0.12 : 0.0)) * (1 - autumn * 0.75);
       const s = 0.85 + rand() * 0.5;
       const rot = rand() * Math.PI * 2;
       const item = { x, y: h, z, s, rot };
       if (isPine) pines.push(item);
+      else if (rand() < autumn * 1.2) maples[Math.floor(rand() * 3)].push(item);
       else broad[Math.floor(rand() * 3)].push(item);
       this.colliders.add(x, z, (isPine ? 0.4 : 0.45) * s, h + 8, h - 2);
     }
@@ -658,7 +671,7 @@ export class Vegetation {
       if (!this.canPlant(x, z, 0.4)) continue;
       const h = t.heightAt(x, z);
       if (h > 70) continue;
-      bushes.push({ x, y: h, z, s: 0.7 + rand() * 0.7, rot: rand() * Math.PI * 2 });
+      (rand() < t.autumnAt(x, z) * 1.2 ? aBushes : bushes).push({ x, y: h, z, s: 0.7 + rand() * 0.7, rot: rand() * Math.PI * 2 });
     }
 
     const color = new THREE.Color();
@@ -702,12 +715,20 @@ export class Vegetation {
       addInstanced(ty.core, this.coreMat, items, { tint: leafTint, cast: false });
       addInstanced(ty.leaves, this.leafMat, items, { tint: leafTint, depth: this.leafDepth });
     });
+    maples.forEach((items, v) => {
+      const ty = this.maples[v];
+      addInstanced(ty.trunk, this.trunkMat, items);
+      addInstanced(ty.core, this.coreMat, items, { tint: leafTint, cast: false });
+      addInstanced(ty.leaves, this.leafMat, items, { tint: leafTint, depth: this.leafDepth });
+    });
     const pine = this.types[3];
     addInstanced(pine.trunk, this.trunkMat, pines);
     addInstanced(pine.cones, this.pineMat, pines, { tint: leafTint });
     addInstanced(this.bush.core, this.coreMat, bushes, { tint: leafTint, cast: false, kind: 'bush' });
     addInstanced(this.bush.leaves, this.leafMat, bushes, { tint: leafTint, depth: this.leafDepth, kind: 'bush' });
-    this.treeCount = broad.reduce((a, b) => a + b.length, 0) + pines.length;
+    addInstanced(this.autumnBush.core, this.coreMat, aBushes, { tint: leafTint, cast: false, kind: 'bush' });
+    addInstanced(this.autumnBush.leaves, this.leafMat, aBushes, { tint: leafTint, depth: this.leafDepth, kind: 'bush' });
+    this.treeCount = broad.reduce((a, b) => a + b.length, 0) + maples.reduce((a, b) => a + b.length, 0) + pines.length;
   }
 
   buildRocks() {

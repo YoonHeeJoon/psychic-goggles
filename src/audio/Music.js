@@ -4,6 +4,8 @@
 //   night  — A minor, slow sparse harp and pad, the odd soft flute phrase
 //   battle — D minor, driving strings, bass ostinato and drums
 //   boss   — C minor, heavier drums, low brass drone and staccato strings
+//   highland — D dorian, plucked koto and bamboo flute over a soft frame drum
+//              (the autumn highlands by day)
 // Exploration themes play a phrase and then rest, like an open-world score.
 
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
@@ -31,6 +33,7 @@ const THEMES = {
   day: { bpm: 78, key: 5, scale: [0, 2, 4, 7, 9], prog: [['F', 'C', 'Dm', 'Bb'], ['Bb', 'C', 'Am', 'Dm'], ['F', 'C', 'Dm', 'Bb'], ['Bb', 'C', 'F', 'F']], seed: 11, play: 16, rest: 10 },
   night: { bpm: 62, key: 9, scale: [0, 3, 5, 7, 10], prog: [['Am', 'F', 'C', 'G'], ['Dm', 'Am', 'F', 'E']], seed: 23, play: 8, rest: 8 },
   battle: { bpm: 132, key: 2, scale: [0, 2, 3, 5, 7, 8, 10], prog: [['Dm', 'Bb', 'C', 'A'], ['Gm', 'Dm', 'Bb', 'A']], seed: 37, play: 1e9, rest: 0 },
+  highland: { bpm: 84, key: 2, scale: [0, 2, 3, 7, 9], prog: [['Dm', 'C', 'Bb', 'C'], ['Dm', 'Am', 'Bb', 'A'], ['F', 'C', 'Dm', 'Am'], ['Bb', 'C', 'Dm', 'Dm']], seed: 67, play: 16, rest: 8 },
   boss: { bpm: 140, key: 0, scale: [0, 2, 3, 5, 7, 8, 10], prog: [['Cm', 'Ab', 'Bb', 'G'], ['Cm', 'Ab', 'Fm', 'G']], seed: 51, play: 1e9, rest: 0 },
 };
 
@@ -183,6 +186,14 @@ export class Music {
     this.voice(tr, 'sawtooth', midi(n), t, 0.004, level, 0.04, 0.12, { lp: 2600 });
   }
 
+  // plucked zither: bright attack, quick decay, a little pitch sag
+  koto(tr, n, t, level) {
+    const f = midi(n);
+    this.voice(tr, 'triangle', f, t, 0.003, level, 0.03, 0.75, { f2: f * 0.994, glide: 0.4 });
+    this.voice(tr, 'sawtooth', f, t, 0.002, level * 0.22, 0.01, 0.22, { lp: 3400 });
+    this.voice(tr, 'sine', f * 2, t, 0.002, level * 0.18, 0.01, 0.35);
+  }
+
   bass(tr, n, t, dur, level) {
     this.voice(tr, 'triangle', midi(n), t, 0.01, level, dur * 0.6, 0.12);
     this.voice(tr, 'sawtooth', midi(n), t, 0.01, level * 0.3, dur * 0.4, 0.1, { lp: 500 });
@@ -230,6 +241,29 @@ export class Music {
     const inRest = bar % cycle >= T.play;
     if (inRest) return;
     const barLen = sixteenth * 16;
+    if (name === 'highland') {
+      if (i16 === 0) this.pad(tr, tones.map((p) => 60 + (p % 12)), t, barLen * 1.05, 0.016, 950);
+      if (i16 === 0 || i16 === 8) this.bass(tr, root - 12 + (i16 === 8 ? 7 : 0), t, barLen * 0.45, 0.055);
+      // frame drum and a soft shaker
+      if (i16 === 0 || i16 === 10) this.drum(tr, 'taiko', t, i16 === 0 ? 0.2 : 0.12);
+      if (i16 % 4 === 2) this.drum(tr, 'hat', t, 0.07);
+      // koto: rolling chord tones, the melody echoed in the second half
+      const row = tr.melody[phrase][b4];
+      if (i16 % 2 === 0) {
+        const e = i16 / 2;
+        if (b4 < 2) {
+          const seq = [0, 2, 1, 2, 0, 1, 2, 1];
+          if (e % 2 === 0 || Math.random() < 0.5) this.koto(tr, 60 + (tones[seq[e]] % 12) + (e >= 6 ? 12 : 0), t, 0.04);
+          const n = row[e];
+          if (n) {
+            let len = 1;
+            while (e + len < 8 && !row[e + len]) len++;
+            this.flute(tr, n, t, len * sixteenth * 2, 0.045);
+          }
+        } else if (row[e]) this.koto(tr, row[e], t, 0.06);
+      }
+      return;
+    }
     if (name === 'day' || name === 'night') {
       const night = name === 'night';
       if (i16 === 0) this.pad(tr, tones.map((p) => 60 + (p % 12)), t, barLen * 1.05, night ? 0.018 : 0.022, night ? 800 : 1200);

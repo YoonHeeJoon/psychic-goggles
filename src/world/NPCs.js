@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CharacterModel } from '../character/CharacterModel.js';
-import { LANDMARKS } from './Terrain.js';
+import { LANDMARKS, PORT_LEN, PORT_DIR, portWorld } from './Terrain.js';
 import { dampAngle, damp } from '../core/noise.js';
 
 // Villagers of the windmill village. Each walks a small routine, turns to
@@ -10,6 +10,8 @@ import { dampAngle, damp } from '../core/noise.js';
 const V = LANDMARKS.village;
 const rad = (d) => (d * Math.PI) / 180;
 const at = (deg, r) => [V.x + Math.cos(rad(deg)) * r, V.z + Math.sin(rad(deg)) * r];
+
+const PL = PORT_LEN;
 
 const col = (o) => ({ skin: '#ffe2d0', eye2: '#ffffff', dark: '#2a2630', gold: '#e3b25a', boots: '#4a3a30', legs: '#3a3440', ...o });
 
@@ -95,6 +97,57 @@ export const NPC_DEFS = [
     speed: 2.6,
     dayOnly: true,
     lines: ['잡아 봐라~!', '나도 글라이더 타고 싶어!', '언니 오빠는 어디서 왔어?', '헤헤, 바람이 간지러워!'],
+  },
+  // ---- 단풍 항구 (autumn harbour)
+  {
+    id: 'harbor',
+    name: '이안',
+    title: '단풍 항구 항구장',
+    cfg: {
+      female: false,
+      scale: 1.06,
+      colors: col({ skin: '#eec7a6', hair: '#2e3442', hairTip: '#5a6a84', eye: '#2e6f8e', eye2: '#c8eaff', outfit: '#2e4a6a', outfit2: '#e3b25a', legs: '#2a2a34' }),
+      hair: { style: 'short', length: 1.3, bangs: 8, ahoge: false, spiky: false, tail: null },
+      outfit: { skirt: 'coat', cape: true, sleeves: 'long', coat: true },
+    },
+    route: [portWorld(PL + 10, 4.5), portWorld(PL + 10, -3), portWorld(PL + 6, 1)],
+    speed: 0.7,
+    wait: [5, 9],
+    face: PORT_DIR,
+    lines: ['등대가 꺼진 지 벌써 사흘째군…', '배가 들어와야 장이 서는데.', '바다 바람이 차갑구려.', '오늘도 수평선엔 돛 하나 없군.'],
+  },
+  {
+    id: 'fisher',
+    name: '소라',
+    title: '항구 어부',
+    cfg: {
+      female: true,
+      scale: 0.96,
+      colors: col({ skin: '#f6d2b8', hair: '#3a7f8a', hairTip: '#8fe0d8', eye: '#2a9a8a', eye2: '#d0fff4', outfit: '#f2ead8', outfit2: '#c25a3a', legs: '#3a4a58' }),
+      hair: { style: 'medium', length: 1.9, bangs: 9, ahoge: true, tail: 'pony' },
+      outfit: { skirt: 'flare', cape: false, sleeves: 'puff', coat: false },
+    },
+    route: [portWorld(PL + 3, 11.5), portWorld(PL - 3, 8.5), portWorld(PL + 9, 9.5)],
+    speed: 1.0,
+    wait: [4, 7],
+    lines: ['그물 손질은 끝이 없다니까!', '오늘은 단풍잎이 바다에 동동 떠다녀요.', '고블린들이 고원에 진을 쳤대요… 무서워.', '갈매기야, 생선은 안 줄 거야!'],
+  },
+  {
+    id: 'sailor',
+    name: '도윤',
+    title: '늙은 선원',
+    cfg: {
+      female: false,
+      scale: 1.0,
+      colors: col({ skin: '#e6b896', hair: '#e0ddd6', hairTip: '#b0aca4', eye: '#5a4a3a', eye2: '#f0e0c8', outfit: '#7a3a32', outfit2: '#efe6d2', legs: '#3a3028' }),
+      hair: { style: 'short', length: 1.1, bangs: 6, ahoge: false, spiky: true, tail: null },
+      outfit: { skirt: 'coat', cape: false, sleeves: 'long', coat: false },
+    },
+    route: [portWorld(PL + 11, -12.5)],
+    face: PORT_DIR - 0.9,
+    speed: 0,
+    wait: [99, 99],
+    lines: ['젊었을 땐 저 등대 불빛만 보고 바다를 건넜지.', '흠, 바람에서 소금 냄새가 나는군.', '단풍이 지면 겨울 배가 온다네.'],
   },
 ];
 

@@ -525,6 +525,36 @@ export class Sound {
     }
   }
 
+  // highland enemies
+  bow() {
+    if (!this.ready || !this.gate('bow', 120)) return;
+    this.tone({ type: 'triangle', f: 210, f2: 120, d: 0.12, gain: 0.07, lp: 1200 });
+    this.nz({ f: 2400, f2: 900, q: 1.2, a: 0.005, d: 0.18, gain: 0.06 });
+  }
+  enemyCast(el) {
+    if (!this.ready || !this.gate('ecast', 200)) return;
+    const root = NOTE((EL_ROOT[el] || 72) - 12);
+    this.tone({ type: 'triangle', f: root, f2: root * 2, a: 0.25, d: 0.5, gain: 0.05, verb: 0.4 });
+    this.nz({ f: 1800, f2: 4200, q: 2, a: 0.3, d: 0.4, gain: 0.04, verb: 0.3 });
+  }
+  blink() {
+    if (!this.ready || !this.gate('blink', 150)) return;
+    this.tone({ type: 'sine', f: 1400, f2: 300, d: 0.2, gain: 0.05, verb: 0.4 });
+    this.nz({ type: 'highpass', f: 3000, d: 0.15, gain: 0.06 });
+  }
+  block() {
+    if (!this.ready || !this.gate('block', 90)) return;
+    this.tone({ type: 'square', f: 180, f2: 140, d: 0.08, gain: 0.05, lp: 1400 });
+    this.nz({ f: 1200, q: 3, d: 0.06, gain: 0.08 });
+    this.tone({ type: 'triangle', f: 820, d: 0.12, gain: 0.025 });
+  }
+  guardBreak() {
+    if (!this.ready) return;
+    this.nz({ type: 'lowpass', f: 2600, f2: 300, d: 0.45, gain: 0.22, buf: 'pink' });
+    this.tone({ f: 160, f2: 60, d: 0.4, gain: 0.2 });
+    [700, 940, 1250].forEach((f, i) => this.tone({ type: 'triangle', f, d: 0.25, gain: 0.04, delay: 0.04 + i * 0.04, verb: 0.3 }));
+  }
+
   enemyDeath() {
     this.nz({ type: 'lowpass', f: 1600, f2: 250, d: 0.4, gain: 0.16, buf: 'pink' });
     this.tone({ f: 340, f2: 110, d: 0.25, gain: 0.08 });

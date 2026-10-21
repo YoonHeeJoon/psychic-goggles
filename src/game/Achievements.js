@@ -10,8 +10,8 @@ const LIST = [
   { id: 'chest1', name: '첫 보물', desc: '보물상자를 처음으로 열기', goal: 1, stat: 'chests' },
   { id: 'chest10', name: '보물 사냥꾼', desc: '보물상자 10개 열기', goal: 10, stat: 'chests' },
   { id: 'eye10', name: '바람을 모으는 자', desc: '별바람의 눈 10개 모으기', goal: 10, stat: 'eyes' },
-  { id: 'eyeAll', name: '바람의 친구', desc: '별바람의 눈을 모두 모으기', goal: 27, stat: 'eyes' },
-  { id: 'wpAll', name: '섬의 지도', desc: '순간이동 포인트를 모두 활성화하기', goal: 9, stat: 'wp' },
+  { id: 'eyeAll', name: '바람의 친구', desc: '별바람의 눈을 모두 모으기', goal: 31, stat: 'eyes' },
+  { id: 'wpAll', name: '섬의 지도', desc: '순간이동 포인트를 모두 활성화하기', goal: 12, stat: 'wp' },
   { id: 'react', name: '원소 연구자', desc: '서로 다른 원소 반응 6종 일으키기', goal: 6, stat: 'reactions' },
   { id: 'gather30', name: '채집가', desc: '재료를 30번 채집하기', goal: 30, stat: 'gathered' },
   { id: 'cook5', name: '요리 입문', desc: '요리 솥에서 요리 5번 하기', goal: 5, stat: 'cooked' },
@@ -23,6 +23,10 @@ const LIST = [
   { id: 'summit', name: '별빛 설산 정상', desc: '섬에서 가장 높은 곳에 서기', goal: 1, stat: 'summit' },
   { id: 'lv30', name: '성장의 기쁨', desc: '캐릭터 하나를 Lv.30까지 올리기', goal: 30, stat: 'maxLv' },
   { id: 'photo', name: '추억 한 장', desc: '사진 모드에서 사진 찍기', goal: 1, stat: 'photos' },
+  { id: 'highland', name: '협곡을 건너는 바람', desc: '바람다리를 건너 단풍 고원에 닿기', goal: 1, stat: 'highland' },
+  { id: 'guard', name: '방패 깨기', desc: '방패 고블린의 방어를 무너뜨리기', goal: 1, stat: 'guardBreaks' },
+  { id: 'elite', name: '우두머리 사냥', desc: '정예 몬스터 처치하기', goal: 1, stat: 'elites' },
+  { id: 'quest2', name: '단풍 항구의 등불', desc: '두 번째 임무 완료하기', goal: 1, stat: 'quest2' },
 ];
 const REWARD = 20;
 
@@ -79,7 +83,9 @@ export class Achievements {
       case 'reactions':
         return Object.keys(this.st.reactionTypes).length;
       case 'quest':
-        return g.quest.step.id === 'done' ? 1 : 0;
+        return g.quest.chapterDone(1) ? 1 : 0;
+      case 'quest2':
+        return g.quest.chapterDone(2) ? 1 : 0;
       case 'puzzles':
         return Object.keys(prog.puzzles || {}).length;
       case 'boss':
@@ -98,6 +104,7 @@ export class Achievements {
     const P = g.player;
     if (g.state === 'playing' && P.state === 'glide') this.st.glide += dt;
     if (P.pos.y > this.summitY && P.state === 'ground') this.st.summit = 1;
+    if (!this.st.highland && P.state === 'ground' && g.frame % 30 === 0 && g.terrain.autumnAt(P.pos.x, P.pos.z) > 0.75) this.st.highland = 1;
     this.checkT -= dt;
     if (this.checkT > 0) return;
     this.checkT = 1;

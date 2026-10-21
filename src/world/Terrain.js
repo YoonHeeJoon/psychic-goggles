@@ -29,6 +29,72 @@ export const LANDMARKS = {
   domain: { x: -80, z: -90, r: 12, h: 19 },
 };
 
+// ---- the autumn highlands (south-east): a maple plateau east of a river
+// gorge, crossed by a long rope bridge, with a terraced harbour town on the
+// coast below it and goblin camps on top.
+export const HIGHLAND = { x: 222, z: 236, r: 92, h: 28 };
+export const GORGE = [
+  [170, 120],
+  [156, 182],
+  [146, 238],
+  [150, 292],
+  [161, 342],
+  [170, 398],
+];
+export const BRIDGE = { ax: 119, az: 236, bx: 172, bz: 240 };
+export const PORT = { tx: 228, tz: 262, px: 266, pz: 310, hTop: 24, hLow: 3.2 };
+const PU = (() => {
+  const dx = PORT.px - PORT.tx,
+    dz = PORT.pz - PORT.tz,
+    L = Math.hypot(dx, dz);
+  return { ux: dx / L, uz: dz / L, L };
+})();
+// harbour-street coordinates: s runs down the street, t across it
+export function portLocal(x, z) {
+  const dx = x - PORT.tx,
+    dz = z - PORT.tz;
+  return { s: dx * PU.ux + dz * PU.uz, t: -dx * PU.uz + dz * PU.ux };
+}
+export function portWorld(s, t) {
+  return [PORT.tx + PU.ux * s - PU.uz * t, PORT.tz + PU.uz * s + PU.ux * t];
+}
+export const PORT_LEN = PU.L;
+export const PORT_DIR = Math.atan2(PU.ux, PU.uz); // yaw looking down the street
+export function townHeight(s) {
+  return lerp(PORT.hTop, PORT.hLow, clamp(s / PU.L, 0, 1));
+}
+// house lots either side of the street, each on its own levelled pad
+export const PORT_LOTS = (() => {
+  const out = [];
+  for (let k = 0; k < 4; k++)
+    for (const side of [-1, 1]) {
+      const s = 9 + k * 12 + (side > 0 ? 3 : 0);
+      const t = side * (k === 3 ? 12.5 : 11);
+      const [x, z] = portWorld(s, t);
+      // face the street (door side is the house's local +z)
+      const rot = Math.atan2(side * PU.uz, -side * PU.ux);
+      out.push({ x, z, s, t, side, rot, w: 7 + ((k + (side > 0 ? 1 : 0)) % 2) * 1.2, d: 5.8, h: townHeight(s), floors: k % 2 === 0 ? 2 : 1 });
+    }
+  return out;
+})();
+export const CAMPS = [
+  { id: 'campA', name: '감시탑 야영지', x: 206, z: 192 },
+  { id: 'campB', name: '붉은 단풍 야영지', x: 270, z: 222 },
+];
+
+function gorgeDistance(x, z) {
+  let best = 1e9;
+  for (let k = 0; k < GORGE.length - 1; k++) {
+    const [ax, az] = GORGE[k];
+    const [bx, bz] = GORGE[k + 1];
+    const dx = bx - ax,
+      dz = bz - az;
+    const t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+    best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+  }
+  return best;
+}
+
 // The challenge domain is a floating platform far out over the northern sea.
 export const DOMAIN_REALM = { x: 0, z: -1350, y: 140, r: 19 };
 
@@ -44,6 +110,14 @@ const PAL = {
   seabed: C('#93a07a'),
   dirt: C('#b39462'),
 };
+// autumn highlands palette
+const AUT = {
+  gold: C('#c7a23e'),
+  orange: C('#c97a30'),
+  red: C('#a9462c'),
+  floor: C('#86522c'),
+  moss: C('#8f9a3e'),
+};
 
 export class Terrain {
   constructor(seed = 1337) {
@@ -54,6 +128,7 @@ export class Terrain {
     this.colors = new Float32Array(RES * RES * 3);
     this.grass = new Float32Array(RES * RES);
     this.forest = new Float32Array(RES * RES);
+    this.autumn = new Float32Array(RES * RES);
     this.paths = [];
     this.blockers = [];
   }
@@ -182,11 +257,65 @@ export class Terrain {
     h = lerp(h, Math.min(h, 1.4), smoothstep(1.35, 1.0, ld));
     h = lerp(h, -5.5, smoothstep(1.0, 0.5, ld));
 
+    h = this.highlands(x, z, h);
+
     // coast profile: ocean floor -> shelf -> beach -> land
     const ocean = -22 + N.fbm(x * 0.01, z * 0.01, 2) * 3;
     const shelf = lerp(ocean, -0.6, smoothstep(0.05, 0.4, island));
     const beach = lerp(shelf, 1.5 + N.noise2(x * 0.03, z * 0.03) * 0.5, smoothstep(0.33, 0.5, island));
-    return lerp(beach, h, smoothstep(0.45, 0.85, island));
+    let out = lerp(beach, h, smoothstep(0.45, 0.85, island));
+    // deep harbour basin below the port plaza
+    const [hx, hz] = portWorld(PU.L + 34, 2);
+    const hb = Math.hypot(x - hx, z - hz);
+    out = lerp(out, Math.min(out, -7), smoothstep(30, 16, hb));
+    return this.harbourTown(x, z, out);
+  }
+
+  // harbour town: a ramp street with levelled lots and a quay at the bottom
+  // (applied after the coast so the lowest terraces keep their height)
+  harbourTown(x, z, h) {
+    const N = this.noise;
+    // harbour town: a ramp street with levelled lots, plaza at the bottom
+    const { s, t } = portLocal(x, z);
+    const tm = smoothstep(32, 22, Math.abs(t)) * smoothstep(-22, -8, s) * smoothstep(PU.L + 26, PU.L + 14, s);
+    if (tm > 0) {
+      let th = townHeight(s) + N.noise2(x * 0.06, z * 0.06) * 0.3;
+      const plaza = smoothstep(PU.L - 8, PU.L - 3, s) * smoothstep(16, 12, Math.abs(t));
+      th = lerp(th, PORT.hLow, plaza);
+      for (const L of PORT_LOTS) {
+        const ls = s - L.s,
+          lt = t - L.t;
+        const d = Math.max(Math.abs(ls) - (L.w / 2 + 2.2), Math.abs(lt) - (L.d / 2 + 2.6));
+        th = lerp(th, L.h, smoothstep(1.4, 0, d));
+      }
+      h = lerp(h, th, tm);
+    }
+    return h;
+  }
+
+
+  // plateau, bluff, terraced harbour town and the river gorge
+  highlands(x, z, h) {
+    const N = this.noise;
+    // maple plateau with cliff edges and soft terraces on top
+    const hd = Math.hypot((x - HIGHLAND.x) * 0.95, z - HIGHLAND.z);
+    const hm = smoothstep(HIGHLAND.r + 12, HIGHLAND.r - 10, hd + N.noise2(x * 0.021, z * 0.021) * 13);
+    if (hm > 0) {
+      const raw = HIGHLAND.h + N.fbm(x * 0.011 + 40, z * 0.011, 3) * 7;
+      const step = 6;
+      const fl = Math.floor(raw / step);
+      const ph = (fl + smoothstep(0.75, 1.0, raw / step - fl)) * step + N.fbm(x * 0.03, z * 0.03, 2) * 1.2;
+      h = lerp(h, Math.max(h, ph), hm);
+    }
+    // bluffs on both rims where the bridge is anchored
+    const bd = Math.hypot(x - (BRIDGE.ax - 9), z - BRIDGE.az);
+    h = lerp(h, Math.max(h, 29 + N.noise2(x * 0.05, z * 0.05) * 1.5), smoothstep(30, 10, bd));
+    const bd2 = Math.hypot(x - (BRIDGE.bx + 10), z - BRIDGE.bz);
+    h = lerp(h, Math.max(h, 30 + N.noise2(x * 0.05 + 9, z * 0.05) * 1.2), smoothstep(26, 9, bd2));
+    // the river gorge, cut deep between the meadow and the plateau
+    const gd = gorgeDistance(x, z) + N.noise2(x * 0.04, z * 0.04) * 2.5;
+    h = lerp(h, -4.5, smoothstep(21, 8, gd));
+    return h;
   }
 
   generate() {
@@ -235,7 +364,28 @@ export class Terrain {
       [-215, -70],
       [R.x + 14, R.z + 6],
     ];
-    for (const p of [pts, pts2, pts3, pts4, pts5]) this.paths.push(this.makePathPolyline(p));
+    // to the rope bridge, and across the highlands to the harbour and camps
+    const pts6 = [
+      [LANDMARKS.lake.x - 70, LANDMARKS.lake.z - 30],
+      [70, 150],
+      [94, 204],
+      [BRIDGE.ax - 5, BRIDGE.az],
+    ];
+    const pts7 = [
+      [BRIDGE.bx + 5, BRIDGE.bz],
+      [198, 246],
+      [PORT.tx - 5, PORT.tz - 7],
+    ];
+    const pts8 = [
+      [198, 246],
+      [CAMPS[0].x - 4, CAMPS[0].z + 16],
+    ];
+    const pts9 = [
+      [PORT.tx - 5, PORT.tz - 7],
+      [250, 238],
+      [CAMPS[1].x - 14, CAMPS[1].z + 6],
+    ];
+    for (const p of [pts, pts2, pts3, pts4, pts5, pts6, pts7, pts8, pts9]) this.paths.push(this.makePathPolyline(p));
   }
 
   makePathPolyline(ctrl) {
@@ -303,6 +453,7 @@ export class Terrain {
     const N = this.n2;
     const H = this.heights;
     const tmp = new THREE.Color();
+    const aut = new THREE.Color();
     // pre-compute coarse path distance grid (every 4 cells) for speed
     const PR = Math.ceil(RES / 4) + 1;
     const pathGrid = new Float32Array(PR * PR);
@@ -345,6 +496,18 @@ export class Terrain {
 
         // alpine
         tmp.lerp(PAL.alpine, smoothstep(45, 85, h) * 0.8);
+
+        // autumn highlands: gold, amber and rust grass, leaf litter in woods
+        const au = this.autumnMask(x, z);
+        this.autumn[k] = au;
+        if (au > 0.001) {
+          aut.copy(AUT.gold).lerp(AUT.orange, smoothstep(-0.15, 0.35, patch));
+          aut.lerp(AUT.red, smoothstep(0.15, 0.55, -patch) * 0.55);
+          aut.lerp(AUT.moss, smoothstep(0.25, 0.6, fine) * 0.25);
+          aut.multiplyScalar(1 + fine * 0.07);
+          aut.lerp(AUT.floor, forest * 0.6);
+          tmp.lerp(aut, au);
+        }
 
         // path
         const pd = pathAt(i, j);
@@ -440,6 +603,13 @@ export class Terrain {
       lerp(arr[(j + 1) * RES + i], arr[(j + 1) * RES + i + 1], fx),
       fz
     );
+  }
+  autumnMask(x, z) {
+    const hd = Math.hypot((x - HIGHLAND.x) * 0.95, z - HIGHLAND.z);
+    return smoothstep(HIGHLAND.r + 34, HIGHLAND.r - 6, hd + this.n2.noise2(x * 0.014, z * 0.014) * 18);
+  }
+  autumnAt(x, z) {
+    return this.sampleField(this.autumn, x, z);
   }
   grassAt(x, z) {
     return this.sampleField(this.grass, x, z);

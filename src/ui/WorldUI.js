@@ -41,10 +41,10 @@ export class WorldUI {
     let b = this.bars.get(enemy);
     if (!b) {
       const el = document.createElement('div');
-      el.className = 'ebar';
-      el.innerHTML = `<div class="aura"></div><div class="lv">Lv.${enemy.level}</div><div class="track"><div class="fill"></div><div class="ghost"></div></div>`;
+      el.className = 'ebar' + (enemy.elite ? ' elite' : '');
+      el.innerHTML = `<div class="aura"></div><div class="lv">${enemy.elite ? '<i>정예</i>' : ''}Lv.${enemy.level}</div><div class="track"><div class="fill"></div><div class="ghost"></div></div>${enemy.guardMax ? '<div class="guard"><div class="gfill"></div></div>' : ''}`;
       this.layer.appendChild(el);
-      b = { el, fill: el.querySelector('.fill'), ghost: el.querySelector('.ghost'), aura: el.querySelector('.aura'), ghostP: 1, auraKey: '' };
+      b = { el, fill: el.querySelector('.fill'), ghost: el.querySelector('.ghost'), aura: el.querySelector('.aura'), guard: el.querySelector('.gfill'), ghostP: 1, auraKey: '' };
       this.bars.set(enemy, b);
     }
     return b;
@@ -92,6 +92,11 @@ export class WorldUI {
       bb.ghostP = Math.max(p, bb.ghostP - dt * 0.6);
       bb.fill.style.width = `${p * 100}%`;
       bb.ghost.style.width = `${bb.ghostP * 100}%`;
+      if (bb.guard) {
+        const gp = e.brokenT > 0 ? 0 : Math.max(0, e.guard / e.guardMax);
+        bb.guard.style.width = `${gp * 100}%`;
+        bb.el.classList.toggle('broken', e.brokenT > 0);
+      }
       const auraKey = (e.frozenT > 0 ? 'ice' : e.aura || '') + (e.chargedT > 0 ? '+thunder' : '');
       if (auraKey !== bb.auraKey) {
         bb.auraKey = auraKey;

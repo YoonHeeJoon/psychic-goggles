@@ -60,11 +60,21 @@ Chromium screenshots, then commits.
 - [x] Character hair/cloth physics chains, footprints in sand and snow
   (vertex bend driven by a lagging tip spring + flutter, matching outline and shadow; instanced multiply decals)
 
-## Iteration 9 — a second region
-- [ ] Autumn highlands across a long rope bridge: maple forests, terraced fields, a cliffside port town
-- [ ] New enemy families: goblin archers (ranged), shield brutes (break the guard), floating elemental casters, elite variants
-- [ ] Enemy camps with watchtowers and loot, a second quest chapter with a short cutscene
-- [ ] Region-specific music theme, map and minimap support for the new area
+## Iteration 9 — a second region ✅
+- [x] Autumn highlands across a long rope bridge: maple forests, terraced fields, a cliffside port town
+  (plateau + river gorge + bluffs shaped in the height function; harbour street in its own s/t frame with levelled
+  lots; sagging plank bridge with thin walkable solids you can pass beneath; maple tree variants, autumn ground,
+  GPU-animated falling leaves)
+- [x] New enemy families: goblin archers (ranged), shield brutes (break the guard), floating elemental casters, elite variants
+- [x] Enemy camps with watchtowers and loot, a second quest chapter with a short cutscene
+  (camp clear → stolen lantern → lighthouse beacon + ship sailing in; old saves continue into chapter 2)
+- [x] Region-specific music theme, map and minimap support for the new area
+  (+ far enemies now LOD out their outlines and shadows: −30~40% draw calls in busy views)
+
+## Iteration 11 — seasons & sky
+- [ ] Snowfall on the peaks, aurora nights, shooting stars
+- [ ] Festival night in the harbour town: lanterns released over the sea, fireworks
+- [ ] Fishing at the pier and lake (timing mini-game), boat rides across the harbour
 
 ## Iteration 10 — systems depth
 - [ ] Weapons and artifacts (stats, refinement), a simple gacha-free unlock path

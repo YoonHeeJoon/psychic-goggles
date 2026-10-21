@@ -106,7 +106,18 @@ export class Player {
     return this.terrain.heightAt(x, z);
   }
 
+  // thin solids (bridge decks, piers) only hold you up when you are on them
   update(dt, input, camYaw) {
+    const G = this.terrain;
+    G.probeY = this.pos.y + 0.3;
+    try {
+      this.updateBody(dt, input, camYaw);
+    } finally {
+      G.probeY = Infinity;
+    }
+  }
+
+  updateBody(dt, input, camYaw) {
     this.switchCd = Math.max(0, this.switchCd - dt);
     for (let k = 0; k < 4; k++) if (input.hit('Digit' + (k + 1))) this.switchTo(k);
     if (input.hit('ControlLeft') || input.hit('KeyZ')) this.walk = !this.walk;

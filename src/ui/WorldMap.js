@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HALF, WORLD_SIZE, RES, CELL, LANDMARKS, SPAWN } from '../world/Terrain.js';
+import { HALF, WORLD_SIZE, RES, CELL, LANDMARKS, SPAWN, HIGHLAND, BRIDGE, CAMPS, PORT_LEN, portWorld } from '../world/Terrain.js';
 
 const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -21,6 +21,11 @@ const LABELS = [
   { text: '별바람 평원', x: 210, z: -10, size: 0.9 },
   { text: '뇌광의 결전장', x: LANDMARKS.arena.x - 6, z: LANDMARKS.arena.z + 40, size: 0.85 },
   { text: '바람 그림자 회랑', x: LANDMARKS.domain.x, z: LANDMARKS.domain.z - 18, size: 0.75 },
+  { text: '단풍 고원', x: HIGHLAND.x + 10, z: HIGHLAND.z - 8, size: 1.2 },
+  { text: '단풍 항구', x: portWorld(PORT_LEN + 4, 26)[0], z: portWorld(PORT_LEN + 4, 26)[1], size: 0.9 },
+  { text: '바람다리', x: (BRIDGE.ax + BRIDGE.bx) / 2, z: BRIDGE.az - 14, size: 0.75 },
+  { text: CAMPS[0].name, x: CAMPS[0].x, z: CAMPS[0].z - 18, size: 0.7 },
+  { text: CAMPS[1].name, x: CAMPS[1].x, z: CAMPS[1].z - 18, size: 0.7 },
 ];
 
 export class WorldMap {

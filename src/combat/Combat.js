@@ -135,6 +135,48 @@ export class Combat {
     E.on('swing', (e, r, arc, dmg) => this.onSwing(e, r, arc, dmg));
     E.on('chargedTick', (e) => this.onChargedTick(e));
     E.on('telegraph', () => {});
+    // highland enemies: arrows and orbs, shield guards, blinking casters
+    E.on('shotHit', (s) => {
+      this.vfx.burst(s.pos, s.kind === 'orb' ? s.color : '#f0e2c0', 14, { speed: 4, size: 0.2, life: 0.4 });
+      this.hurtPlayer(s.dmg, s.src);
+    });
+    E.on('shotEnd', (s) => {
+      if (s.kind === 'orb') this.vfx.burst(s.pos, s.color, 10, { speed: 3, size: 0.18, life: 0.35 });
+      else this.vfx.burst(s.pos, '#c8b896', 5, { speed: 2, size: 0.12, life: 0.3, up: 0.6 });
+    });
+    E.on('shoot', () => this.g.sfx.bow());
+    E.on('cast', (e) => {
+      this.g.sfx.enemyCast(e.selfEl);
+      this.vfx.flash(e.model.crystal.getWorldPosition(new THREE.Vector3()), ELEMENT_COLORS[e.selfEl], 0.8, 0.9);
+    });
+    E.on('blink', (e, from) => {
+      const col = ELEMENT_COLORS[e.selfEl] || '#c9a8ff';
+      for (const p of [from.clone().setY(from.y + 0.7), e.pos.clone().setY(e.pos.y + 0.7)]) this.vfx.burst(p, col, 22, { speed: 5, size: 0.22, life: 0.5, gravity: 0 });
+      this.g.sfx.blink();
+    });
+    E.on('block', (e) => {
+      if (this.blockT > 0) return;
+      this.blockT = 0.25;
+      const c = e.center(new THREE.Vector3());
+      this.ui.text(c.setY(c.y + e.height * 0.4), '막음', '#cfd6e0', { small: true });
+      this.vfx.burst(c, '#fff4d6', 10, { speed: 5, size: 0.14, life: 0.25 });
+      this.g.sfx.block();
+    });
+    E.on('guardBreak', (e) => {
+      const c = e.center(new THREE.Vector3());
+      this.ui.text(c.clone().setY(c.y + e.height * 0.7), '방어 붕괴!', '#ffd36a', { reaction: true });
+      this.vfx.ring(c.clone().setY(e.pos.y + 0.2), '#ffd36a', 3.5, 0.4, { inner: 0.8 });
+      this.vfx.burst(c, '#ffe6a0', 34, { speed: 7, size: 0.26, life: 0.6 });
+      this.hitStop = Math.max(this.hitStop, 0.12);
+      this.g.cameraCtl.shake(0.25, 0.25);
+      this.g.sfx.guardBreak();
+      if (this.g.achievements) this.g.achievements.add('guardBreaks');
+    });
+    E.on('quake', (e, r) => {
+      const P = this.player;
+      if (Math.hypot(P.pos.x - e.pos.x, P.pos.z - e.pos.z) < r * 4) this.g.cameraCtl.shake(0.22, 0.25);
+    });
+    this.blockT = 0;
   }
 
   // ======================================================================
@@ -142,6 +184,7 @@ export class Combat {
   // ======================================================================
   update(dt, input) {
     const P = this.player;
+    this.blockT = Math.max(0, this.blockT - dt);
     for (const c of P.party) {
       c.skillCd = Math.max(0, c.skillCd - dt);
       c.burstCd = Math.max(0, c.burstCd - dt);
@@ -490,6 +533,8 @@ export class Combat {
       else if (reaction.type === 'swirl') this.swirl(e, center, reaction.el);
     }
     let mult = h.mult;
+    const gmul = e.guardCheck ? e.guardCheck(h, reaction) : 1;
+    mult *= gmul;
     if (h.heavy && e.frozenT > 0) {
       e.unfreeze();
       mult *= 1.6;
@@ -508,7 +553,7 @@ export class Combat {
     if (el === 'phys' && e.superT > 0) dmg *= 1.4;
     dmg = Math.max(1, Math.round(dmg));
     let knock = null;
-    if (h.knock && h.dir) knock = new THREE.Vector3(h.dir[0] * h.knock, 0, h.dir[1] * h.knock);
+    if (h.knock && h.dir && gmul >= 1) knock = new THREE.Vector3(h.dir[0] * h.knock, 0, h.dir[1] * h.knock);
     e.hit(dmg, knock, h.launch);
     this.ui.text(center.clone().setY(center.y + e.height * 0.45), String(dmg), ELEMENT_COLORS[el], { crit });
     if (!h.quiet) {
@@ -731,9 +776,13 @@ export class Combat {
     this.vfx.burst(c, col, 40, { speed: 7, size: 0.3, life: 0.8, up: 0.6 });
     this.vfx.flash(c, '#ffffff', 1.2, 0.2);
     this.g.sfx.enemyDeath();
-    if (this.g.achievements) this.g.achievements.add('kills');
-    this.spawnEnergy(c, this.player.current.cfg.element, 1);
-    this.spawnGems(c, 2 + Math.floor(Math.random() * 3));
+    if (this.g.achievements) {
+      this.g.achievements.add('kills');
+      if (e.elite) this.g.achievements.add('elites');
+    }
+    this.spawnEnergy(c, this.player.current.cfg.element, e.elite ? 3 : 1);
+    this.spawnGems(c, (2 + Math.floor(Math.random() * 3)) * (e.elite ? 3 : 1));
+    if (e.aim) e.aim.visible = false;
   }
 
   // star-gem pickups that pop out and then fly to the player (+5 each)

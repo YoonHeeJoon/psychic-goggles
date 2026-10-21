@@ -10,7 +10,8 @@ import {
   TERRAIN_SAMPLE_GLSL,
 } from '../render/shaders.js';
 import { toonMaterial } from '../render/materials.js';
-import { LANDMARKS, SPAWN, CELL, DOMAIN_REALM } from './Terrain.js';
+import { LANDMARKS, SPAWN, CELL, DOMAIN_REALM, BRIDGE, PORT_LEN, CAMPS, portWorld } from './Terrain.js';
+import { buildHighlands, updateBoats } from './Highlands.js';
 import { shared } from '../render/shaders.js';
 import { mulberry32, smoothstep, lerp } from '../core/noise.js';
 
@@ -366,18 +367,18 @@ const _p = new V3();
 export function M(x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) {
   return new THREE.Matrix4().compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s.set(sx, sy, sz));
 }
-function cyl(rt, rb, h, seg = 12, open = false) {
+export function cyl(rt, rb, h, seg = 12, open = false) {
   const g = new THREE.CylinderGeometry(rt, rb, h, seg, 1, open);
   g.translate(0, h / 2, 0);
   return g;
 }
-function box(w, h, d) {
+export function box(w, h, d) {
   const g = new THREE.BoxGeometry(w, h, d);
   g.translate(0, h / 2, 0);
   return g;
 }
 // cylinder spanning two points
-function between(a, b, r1, r2 = r1, seg = 8) {
+export function between(a, b, r1, r2 = r1, seg = 8) {
   const d = new V3().subVectors(b, a);
   const L = d.length();
   const g = new THREE.CylinderGeometry(r2, r1, L, seg, 1);
@@ -387,7 +388,7 @@ function between(a, b, r1, r2 = r1, seg = 8) {
   return g;
 }
 // beam (box) spanning two points
-function beam(a, b, t = 0.16, d = t) {
+export function beam(a, b, t = 0.16, d = t) {
   const dir = new V3().subVectors(b, a);
   const L = dir.length();
   const g = new THREE.BoxGeometry(t, L, d);
@@ -398,7 +399,7 @@ function beam(a, b, t = 0.16, d = t) {
 }
 
 // Accumulates geometry per material key and merges at the end.
-class Builder {
+export class Builder {
   constructor() {
     this.groups = new Map();
   }
@@ -509,15 +510,17 @@ export class Solids {
       }
     return s;
   }
-  // rotated rectangle; top is a number or fn(lx, lz)
-  addBox(x, z, hw, hd, rot, top) {
-    return this.insert({ kind: 'box', x, z, hw, hd, cs: Math.cos(rot), sn: Math.sin(rot), top }, Math.hypot(hw, hd));
+  // rotated rectangle; top is a number or fn(lx, lz). A thin solid (bridge
+  // deck, pier) only counts for things at or just under its top, so you can
+  // pass beneath it.
+  addBox(x, z, hw, hd, rot, top, thin = false) {
+    return this.insert({ kind: 'box', x, z, hw, hd, cs: Math.cos(rot), sn: Math.sin(rot), top, thin }, Math.hypot(hw, hd));
   }
   // circle; top is a number or fn(dist)
   addCircle(x, z, r, top) {
     return this.insert({ kind: 'circle', x, z, r, top }, r);
   }
-  heightAt(x, z) {
+  heightAt(x, z, probeY = Infinity) {
     const list = this.map.get(this.key(Math.floor(x / this.cell), Math.floor(z / this.cell)));
     let best = -Infinity;
     if (!list) return best;
@@ -530,6 +533,7 @@ export class Solids {
           lz = dx * s.sn + dz * s.cs;
         if (Math.abs(lx) > s.hw || Math.abs(lz) > s.hd) continue;
         h = typeof s.top === 'function' ? s.top(lx, lz) : s.top;
+        if (s.thin && probeY < h - 1.3) continue;
       } else {
         const d2 = dx * dx + dz * dz;
         if (d2 > s.r * s.r) continue;
@@ -555,15 +559,17 @@ export class Ground {
   constructor(terrain, solids) {
     this.terrain = terrain;
     this.solids = solids;
+    // height of whoever is asking (the player sets it), for thin solids
+    this.probeY = Infinity;
   }
   heightAt(x, z) {
     const t = this.terrain.heightAt(x, z);
-    const s = this.solids.heightAt(x, z);
+    const s = this.solids.heightAt(x, z, this.probeY);
     return s > t ? s : t;
   }
   // top of a structure at (x, z), or -Infinity
   solidAt(x, z) {
-    const s = this.solids.heightAt(x, z);
+    const s = this.solids.heightAt(x, z, this.probeY);
     return s > this.terrain.heightAt(x, z) ? s : -Infinity;
   }
   normalAt(x, z, out = new V3()) {
@@ -594,6 +600,9 @@ export const WAYPOINTS = [
   { id: 'snow', name: '설산 기슭', x: 56, z: -86 },
   { id: 'arena', name: '뇌광의 결전장', x: 334, z: -38 },
   { id: 'gate', name: '바람 그림자 회랑 입구', x: -68, z: -78 },
+  { id: 'bridge', name: '바람다리', x: BRIDGE.ax - 17, z: BRIDGE.az + 5 },
+  { id: 'highland', name: '단풍 고원', x: 196, z: 252 },
+  { id: 'port', name: '단풍 항구', x: portWorld(PORT_LEN - 1, -9)[0], z: portWorld(PORT_LEN - 1, -9)[1] },
 ];
 
 // Swirling additive portal (domain gate and the realm's exit)
@@ -666,6 +675,7 @@ export class Structures {
     this.buildArena();
     this.buildDomainGate();
     this.buildRealm();
+    buildHighlands(this);
     this.buildWaypoints();
     this.terrain.paintAreas(this.areas);
   }
@@ -1713,5 +1723,6 @@ export class Structures {
       const s = 1 + Math.sin(this.time * 2.2) * 0.06;
       this.statue.orb.scale.setScalar(s);
     }
+    updateBoats(this, this.time);
   }
 }
