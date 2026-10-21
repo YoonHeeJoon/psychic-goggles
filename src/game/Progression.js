@@ -314,7 +314,7 @@ export class CharPanel {
     }).join('');
     const list = G.d.arts.filter((a) => a.slot === this.slot).sort((a, b) => b.rarity - a.rarity || b.lv - a.lv);
     const cur = worn[this.slot];
-    const sel = (this.pick && list.find((a) => a.uid === this.pick)) || cur || null;
+    const sel = (this.pick && list.find((a) => a.uid === this.pick)) || cur || list.find((a) => !a.owner) || list[0] || null;
     const sets = Object.entries(G.setCounts(c))
       .map(([k, n]) => `<span class="set-chip ${n >= 2 ? 'on' : ''}" style="--sc:${SETS[k].color}">${SETS[k].name} ${n}</span>`)
       .join('');
