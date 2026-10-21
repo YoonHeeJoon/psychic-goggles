@@ -3,6 +3,7 @@ import { elementIcon } from './icons.js';
 import { ELEMENTS } from '../character/characters.js';
 import { PRESETS } from '../core/Renderer.js';
 import { WEATHER_MODES } from '../world/Weather.js';
+import { ACTIONS, keyLabel } from '../core/Input.js';
 import { HALF, WORLD_SIZE, RES, SEA_LEVEL } from '../world/Terrain.js';
 
 const el = (tag, cls, html) => {
@@ -436,7 +437,7 @@ export class Menus {
         <div class="controls">
           <div><b>WASD</b> 이동</div><div><b>Shift</b> 질주 · 회피</div><div><b>Space</b> 점프 · 공중에서 활공</div><div><b>절벽으로 이동</b> 등반</div>
           <div><b>좌클릭</b> 일반 공격</div><div><b>E</b> 원소 스킬</div><div><b>Q</b> 원소 폭발</div><div><b>1-4</b> 캐릭터 교체</div>
-          <div><b>F</b> 대화 · 채집</div><div><b>M</b> 지도 · 순간이동</div><div><b>B</b> 가방 · 요리</div><div><b>H</b> 도움말</div>
+          <div><b>F</b> 대화 · 채집</div><div><b>M</b> 지도 · 순간이동</div><div><b>B</b> 가방 · <b>C</b> 캐릭터</div><div><b>L</b> 업적 · <b>P</b> 사진</div>
         </div>
         <div class="touch-controls"><b>왼쪽</b> 끌어서 이동 · <b>오른쪽</b> 끌어서 시점 · 버튼으로 공격 · 스킬 · 점프 · 질주<br>초상화를 눌러 캐릭터 교체 · 활공 중 공격 버튼으로 낙하 공격</div>
       </div>
@@ -453,6 +454,7 @@ export class Menus {
           .join('')}</select><small>풀 밀도·그림자·해상도가 바로 바뀝니다</small></label>
         <label>마우스 감도 <input type="range" class="sens" id="opt-sens" min="0.3" max="2.5" step="0.05" value="1"></label>
         <label>소리 크기 <input type="range" class="vol" id="opt-vol" min="0" max="1" step="0.05" value="0.8"></label>
+        <label>음악 크기 <input type="range" class="mvol" id="opt-mvol" min="0" max="1" step="0.05" value="0.55"></label>
         <label class="row"><input type="checkbox" class="mute" id="opt-mute"> 소리 끄기</label>
         <label>시간 <input type="range" class="tod" id="opt-tod" min="0" max="24" step="0.05" value="9"></label>
         <label>시간 흐름 <select class="tspeed" id="opt-tspeed"><option value="0">멈춤</option><option value="1" selected>보통 (하루 24분)</option><option value="6">빠름</option><option value="30">매우 빠름</option></select></label>
@@ -462,6 +464,8 @@ export class Menus {
         <label class="row"><input type="checkbox" class="inv" id="opt-inv"> 상하 반전</label>
         <label class="row"><input type="checkbox" class="autores" id="opt-autores"> 자동 해상도 (프레임 유지)</label>
         <label class="row"><input type="checkbox" class="showfps" id="opt-showfps"> FPS 표시</label>
+        <div class="pm-row"><button class="pm-btn pm-log">모험 기록</button><button class="pm-btn pm-photo">사진 모드</button></div>
+        <details class="keys"><summary>조작 키 설정</summary><div class="key-list"></div><button class="pm-btn key-reset">기본값으로</button></details>
         <button class="resume">계속하기</button>
       </div>`
     );
@@ -497,6 +501,9 @@ export class Menus {
     mute.checked = g.sfx.muted;
     vol.addEventListener('input', (e) => g.sfx.setVolume(+e.target.value));
     mute.addEventListener('change', (e) => g.sfx.setMuted(e.target.checked));
+    const mv = P.querySelector('.mvol');
+    mv.value = g.music.volume;
+    mv.addEventListener('input', (e) => g.music.setVolume(+e.target.value));
     P.querySelector('.tod').addEventListener('input', (e) => (g.env.time = +e.target.value));
     P.querySelector('.tspeed').addEventListener('change', (e) => (g.env.timeScale = +e.target.value / 60));
     P.querySelector('.weather').addEventListener('change', (e) => g.weather.setMode(e.target.value));
@@ -506,6 +513,41 @@ export class Menus {
     ar.addEventListener('change', (e) => g.setAutoRes(e.target.checked));
     P.querySelector('.showfps').addEventListener('change', (e) => g.hud.fps.classList.toggle('hidden', !e.target.checked));
     P.querySelector('.resume').addEventListener('click', () => g.resume());
+    P.querySelector('.pm-log').addEventListener('click', () => {
+      g.resume();
+      g.openPanel(g.achievements);
+    });
+    P.querySelector('.pm-photo').addEventListener('click', () => {
+      g.resume();
+      g.photo.open();
+    });
+    P.querySelector('.key-reset').addEventListener('click', () => {
+      g.input.resetBinds();
+      this.renderKeys();
+    });
+    this.renderKeys();
+  }
+
+  renderKeys() {
+    const input = this.game.input;
+    const list = this.pause.querySelector('.key-list');
+    list.innerHTML = ACTIONS.map(([id, label]) => `<div class="key-row"><span>${label}</span><button data-a="${id}">${keyLabel(input.binds[id])}</button></div>`).join('');
+    list.querySelectorAll('button').forEach((b) =>
+      b.addEventListener('click', () => {
+        b.textContent = '키를 누르세요…';
+        b.classList.add('wait');
+        input.capture = true;
+        const onKey = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.removeEventListener('keydown', onKey, true);
+          input.capture = false;
+          if (e.code !== 'Escape') input.bind(b.dataset.a, e.code);
+          this.renderKeys();
+        };
+        window.addEventListener('keydown', onKey, true);
+      })
+    );
   }
 
   showPause() {

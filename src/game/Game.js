@@ -19,6 +19,8 @@ import { BossUI } from '../ui/BossUI.js';
 import { Progression, CharPanel } from './Progression.js';
 import { Puzzles } from '../world/Puzzles.js';
 import { Domain } from './Domain.js';
+import { Achievements } from './Achievements.js';
+import { Photo } from './Photo.js';
 import { Grass } from '../world/Grass.js';
 import { Vegetation, setLeafCoverage } from '../world/Vegetation.js';
 import { Player } from '../character/Player.js';
@@ -32,6 +34,7 @@ import { WorldMap } from '../ui/WorldMap.js';
 import { TouchControls } from '../ui/Touch.js';
 import { damp, smoothstep } from '../core/noise.js';
 import { Sound } from '../audio/Sound.js';
+import { Music } from '../audio/Music.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
@@ -48,6 +51,9 @@ export class Game {
     const fdt = parseFloat(new URLSearchParams(location.search).get('dt'));
     this.fixedDt = fdt > 0 && fdt < 0.2 ? fdt : 0;
     this.sfx = new Sound();
+    this.music = new Music(this.sfx);
+    this.battleHold = 0;
+    this.combatCheck = 0;
     // dynamic resolution keeps the frame rate up on slower GPUs
     this.autoRes = !this.fixedDt;
     try {
@@ -102,7 +108,7 @@ export class Game {
     loader.set(0.75, '여행자를 깨우는 중...');
     await nextFrame();
     this.player = new Player(this);
-    this.cameraCtl = new CameraController(this.camera, this.terrain);
+    this.cameraCtl = new CameraController(this.camera, this.ground, this.vegetation.colliders);
     this.cameraCtl.yaw = 0;
     this.combat = new Combat(this);
     this.explore.build();
@@ -130,6 +136,8 @@ export class Game {
     this.quest = new Quest(this);
     this.bossUI = new BossUI(this.container);
     this.charPanel = new CharPanel(this, this.container);
+    this.achievements = new Achievements(this);
+    this.photo = new Photo(this);
     if (TouchControls.wanted()) this.touch = new TouchControls(this);
     this.tpFade = document.createElement('div');
     this.tpFade.className = 'tp-fade';
@@ -155,16 +163,23 @@ export class Game {
         if (this.state === 'playing') this.pause();
         else if (this.state === 'paused') this.resume();
       }
+      const code = this.input.canon(e.code);
+      if (this.input.capture) return;
       if (e.code === 'KeyH' && this.state === 'playing') this.hud.help.classList.toggle('hidden');
-      if (e.code === 'KeyM') {
+      if (code === 'KeyM') {
         if (this.state === 'playing') this.openMap();
         else if (this.state === 'map') this.closeMap();
       }
-      if (e.code === 'KeyB') {
+      if (code === 'KeyB') {
         if (this.state === 'playing') this.openPanel(this.bag);
         else if (this.state === 'panel' && this.panel === this.bag) this.closePanel();
       }
-      if (e.code === 'KeyC') {
+      if (code === 'KeyL') {
+        if (this.state === 'playing') this.openPanel(this.achievements);
+        else if (this.state === 'panel' && this.panel === this.achievements) this.closePanel();
+      }
+      if (code === 'KeyP' && this.state === 'playing') this.photo.open();
+      if (code === 'KeyC') {
         if (this.state === 'playing') this.openPanel(this.charPanel);
         else if (this.state === 'panel' && this.panel === this.charPanel) this.closePanel();
       }
@@ -345,6 +360,32 @@ export class Game {
       this.clock.getDelta();
       if (c.onEnd) c.onEnd();
     }
+  }
+
+  // ---- elemental burst cut-in and character swap flourish
+  burstCutIn(c, name) {
+    const E = ELEMENTS[c.cfg.element];
+    this.cameraCtl.cutIn = { t: 0, dur: 1.15, yaw: this.player.yaw };
+    const el = this.cutInEl || (this.cutInEl = document.createElement('div'));
+    if (!el.parentNode) {
+      el.className = 'cutin';
+      this.container.appendChild(el);
+    }
+    el.style.setProperty('--el', E.color);
+    el.style.setProperty('--glow', E.glow);
+    el.innerHTML = `<div class="ci-band"></div><div class="ci-streaks"></div><img class="ci-face" src="${c.portrait || ''}" alt=""><div class="ci-text"><span class="ci-who">${c.cfg.name}</span><span class="ci-name">${name}</span></div>`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    this.flashScreen(E.glow, 0.18);
+  }
+
+  swapFlourish() {
+    const P = this.player;
+    const c = P.current;
+    this.swapPop = { model: c.model, t: 0, base: c.cfg.scale };
+    const col = ELEMENTS[c.cfg.element].glow;
+    this.explore.beam(P.pos.clone(), col, 3.6, 0.55, 0.55);
   }
 
   bossIntro(boss) {
@@ -628,6 +669,32 @@ export class Game {
     A.air = P.state === 'glide' || (P.state === 'air' && P.vel.y < -6);
     A.active = this.state === 'playing' || this.state === 'title';
     s.update(dt, A);
+    this.updateMusic(dt);
+  }
+
+  // pick the score: exploration by time of day, battle near angry enemies, boss
+  updateMusic(dt) {
+    this.combatCheck -= dt;
+    if (this.combatCheck <= 0) {
+      this.combatCheck = 0.5;
+      const P = this.player.pos;
+      let fight = false;
+      if (this.state === 'playing' || this.state === 'cine')
+        for (const e of this.combat.enemies.list) {
+          if (e.alive && e.aggro && !e.isBoss && Math.abs(e.pos.x - P.x) < 30 && Math.abs(e.pos.z - P.z) < 30) {
+            fight = true;
+            break;
+          }
+        }
+      if (fight) this.battleHold = 6;
+    }
+    this.battleHold = Math.max(0, this.battleHold - dt);
+    const B = this.boss;
+    let theme = shared.uNight.value > 0.5 ? 'night' : 'day';
+    if (B && B.alive && B.aggro && B.state !== 'dormant') theme = 'boss';
+    else if (this.battleHold > 0) theme = 'battle';
+    this.music.setTheme(theme);
+    this.music.update(dt, this.sfx.ready);
   }
 
   handleEvents() {
@@ -639,7 +706,10 @@ export class Game {
       else if (e.type === 'glide') s.glider();
       else if (e.type === 'splash') s.splash();
       else if (e.type === 'climb') s.climbGrab();
-      else if (e.type === 'switch') s.swap(this.player.current.cfg.element);
+      else if (e.type === 'switch') {
+        s.swap(this.player.current.cfg.element);
+        this.swapFlourish();
+      }
       if (e.type === 'switch') {
         const p = this.player.current;
         this.hud.setActive(this.player.party, this.player.active);
@@ -675,6 +745,7 @@ export class Game {
     const dt = this.fixedDt || real;
     this.frame++;
     this.adaptResolution(raw);
+    if (this.state !== 'loading') this.input.pollPad(real, this);
     this.update(dt);
     this.updateRays();
     this.rendererW.render();
@@ -754,13 +825,29 @@ export class Game {
     } else if (this.state === 'cine') {
       this.combat.lateUpdate(dt, dt);
       this.updateCine(dt);
+    } else if (this.state === 'photo') {
+      this.combat.lateUpdate(0, dt);
+      this.photo.update(dt);
     }
+    if (this.achievements && this.state !== 'paused') this.achievements.update(dt);
     if (this.bossUI) {
       const b = this.boss;
       const show = b.aggro && b.alive && b.state !== 'dormant' && b.state !== 'intro' && this.state === 'playing';
       this.bossUI.update(dt, b, show);
     }
     if (this.state === 'playing') this.updateBuffs(dt);
+    if (this.swapPop) {
+      // the new character pops in with a little overshoot
+      const sp = this.swapPop;
+      sp.t += dt;
+      const k = Math.min(1, sp.t / 0.3);
+      const back = 1 + 2.4 * Math.pow(k - 1, 3) + 1.4 * Math.pow(k - 1, 2);
+      sp.model.root.scale.setScalar(sp.base * (0.72 + 0.28 * back));
+      if (k >= 1) {
+        sp.model.root.scale.setScalar(sp.base);
+        this.swapPop = null;
+      }
+    }
     if (this.state !== 'paused' && this.state !== 'loading') {
       this.gathering.update(dt);
       this.npcs.update(dt);

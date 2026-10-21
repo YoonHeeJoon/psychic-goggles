@@ -631,6 +631,11 @@ export class Sound {
     this.nz({ f: 3000, q: 2, d: 0.08, gain: 0.05, delay: 0.1 });
   }
 
+  shutter() {
+    this.nz({ type: 'bandpass', f: 3200, q: 2, a: 0.002, d: 0.03, gain: 0.12, bus: this.uiBus });
+    this.nz({ type: 'bandpass', f: 2200, q: 2, a: 0.002, d: 0.05, gain: 0.1, bus: this.uiBus, delay: 0.07 });
+  }
+
   // ------------------------------------------------------------------ boss
   bossCharge() {
     this.tone({ type: 'sawtooth', f: 180, f2: 720, a: 0.05, d: 0.9, gain: 0.05, lp: 2200, verb: 0.3 });

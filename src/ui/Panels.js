@@ -162,6 +162,7 @@ export class CookPanel {
       this.g.hud.toast(`요리 완성 · <b>${ITEMS[r.out].name}</b> ×1`, '#ffd36a');
       this.render();
       if (this.g.quest) this.g.quest.onEvent('cook', r.out);
+      if (this.g.achievements) this.g.achievements.add('cooked');
     }, 900);
   }
 }

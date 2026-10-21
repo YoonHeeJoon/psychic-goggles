@@ -287,7 +287,16 @@ varying vec3 vN;
 varying vec3 vWorldPos;
 varying vec2 vUv;
 varying float vH;
+// ordered dither so foliage right in front of the camera fades instead of
+// filling the screen
+float bayer4(vec2 p){
+  ivec2 i = ivec2(mod(p, 4.0));
+  float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+  return (m[i.x + i.y * 4] + 0.5) / 16.0;
+}
 void main(){
+  float keep = smoothstep(1.0, 3.4, distance(vWorldPos, cameraPosition));
+  if (keep < 1.0 && keep < bayer4(gl_FragCoord.xy)) discard;
   vec3 albedo = vColor;
   float alpha = 1.0;
   #ifdef LEAF

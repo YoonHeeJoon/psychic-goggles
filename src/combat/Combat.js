@@ -283,7 +283,7 @@ export class Combat {
     this.g.cameraCtl.shake(0.15, 0.25);
     this.begin({ kind: 'burst', stance: true, ...kit.burst.def(this) });
     this.g.sfx.burst(c.cfg.element);
-    this.g.hud.flashCenter(kit.burst.name, 1200);
+    this.g.burstCutIn(c, kit.burst.name);
   }
 
   poseOverride(Pose, model) {
@@ -473,6 +473,7 @@ export class Combat {
     if (reaction) {
       const R = REACTIONS[reaction.type];
       this.g.sfx.reaction(reaction.type);
+      if (this.g.achievements) this.g.achievements.reaction(reaction.type);
       this.ui.text(center.clone().setY(center.y + e.height * 0.7), R.name, R.color, { reaction: true });
       if (reaction.type === 'vaporize' || reaction.type === 'melt') {
         rmult = reaction.mult;
@@ -494,6 +495,7 @@ export class Combat {
       mult *= 1.6;
       this.ui.text(center.clone().setY(center.y + e.height * 0.9), REACTIONS.shatter.name, REACTIONS.shatter.color, { reaction: true });
       this.g.sfx.reaction('shatter');
+      if (this.g.achievements) this.g.achievements.reaction('shatter');
       this.vfx.burst(center, '#e8fbff', 30, { speed: 8, size: 0.25, life: 0.6 });
     }
     // character attack, talent level for skills/bursts, and the level gap
@@ -729,6 +731,7 @@ export class Combat {
     this.vfx.burst(c, col, 40, { speed: 7, size: 0.3, life: 0.8, up: 0.6 });
     this.vfx.flash(c, '#ffffff', 1.2, 0.2);
     this.g.sfx.enemyDeath();
+    if (this.g.achievements) this.g.achievements.add('kills');
     this.spawnEnergy(c, this.player.current.cfg.element, 1);
     this.spawnGems(c, 2 + Math.floor(Math.random() * 3));
   }

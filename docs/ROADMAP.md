@@ -43,8 +43,14 @@ Chromium screenshots, then commits.
 - [x] Character level-ups / talents from gems, damage scaling and enemy levels by region
 - [x] Domain-style challenge with a reward chest and a short cinematic intro
 
-## Iteration 7 — feel & finish
-- [ ] Gamepad support, rebindable keys, camera collision with trees and walls
-- [ ] Character switching flourish (swap VFX, voice-like chimes), elemental burst cut-in camera
-- [ ] Ambient music: procedural day / night / battle themes that cross-fade
-- [ ] Achievements / adventure log, photo mode
+## Iteration 7 — feel & finish ✅
+- [x] Gamepad support, rebindable keys, camera collision with trees and walls
+- [x] Character switching flourish (swap VFX, voice-like chimes), elemental burst cut-in camera
+- [x] Ambient music: procedural day / night / battle themes that cross-fade
+- [x] Achievements / adventure log, photo mode
+
+## Iteration 8 — beauty pass
+- [ ] Screen-space ambient occlusion and contact shadows tuned for the toon look
+- [ ] Better water: refraction of the lake bed, shoreline waves, foam trails behind swimmers
+- [ ] Cloud shadows sweeping over the land, volumetric fog in valleys at dawn
+- [ ] Character hair/cloth physics chains, footprints in sand and snow

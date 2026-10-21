@@ -2,10 +2,19 @@ import * as THREE from 'three';
 import { clamp, damp, lerp } from '../core/noise.js';
 import { SEA_LEVEL } from '../world/Terrain.js';
 
+const smoothstepJS = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const _cp = new THREE.Vector3(),
+  _cl = new THREE.Vector3(),
+  _bl = new THREE.Vector3();
+
 export class CameraController {
-  constructor(camera, terrain) {
+  constructor(camera, terrain, colliders = null) {
     this.camera = camera;
-    this.terrain = terrain;
+    this.terrain = terrain; // ground: terrain + walkable structures
+    this.colliders = colliders; // tree trunks
     this.yaw = 0;
     this.pitch = 0.2;
     this.dist = 6.2;
@@ -52,10 +61,12 @@ export class CameraController {
     const cp = Math.cos(this.pitch);
     const dir = this._dir.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
 
-    // terrain collision: march out from the target
+    // collision: march out from the target against the ground, buildings
+    // (their footprints count as solid up to the roof) and tree trunks
     let d = this.dist;
-    const steps = 20;
-    for (let k = 1; k <= steps; k++) {
+    const steps = 24;
+    const C = this.colliders;
+    march: for (let k = 1; k <= steps; k++) {
       const t = (k / steps) * this.dist;
       const px = this.target.x + dir.x * t;
       const py = this.target.y + dir.y * t;
@@ -64,6 +75,14 @@ export class CameraController {
       if (py < gh) {
         d = Math.max(0.8, t - this.dist / steps);
         break;
+      }
+      if (C && t > 0.9) {
+        for (const c of C.query(px, pz)) {
+          if (py < c.top && py > c.bottom && Math.hypot(c.x - px, c.z - pz) < c.r + 0.3) {
+            d = Math.max(0.8, t - this.dist / steps);
+            break march;
+          }
+        }
       }
     }
     this.curDist = d < this.curDist ? d : damp(this.curDist, d, 5, dt);
@@ -74,6 +93,23 @@ export class CameraController {
     if (cam.position.y < gh) cam.position.y = gh;
     if (cam.position.y < SEA_LEVEL + 0.25 && cam.position.y > SEA_LEVEL - 0.4) cam.position.y = SEA_LEVEL + 0.25;
     cam.lookAt(this.target.x, this.target.y + 0.05, this.target.z);
+
+    // elemental burst cut-in: swing round to the character's face, then back
+    const ci = this.cutIn;
+    if (ci) {
+      ci.t += dt;
+      const w = smoothstepJS(0, 0.16, ci.t) * (1 - smoothstepJS(ci.dur - 0.32, ci.dur, ci.t));
+      const fx = Math.sin(ci.yaw),
+        fz = Math.cos(ci.yaw);
+      const head = player.pos.y + player.height * 0.82;
+      const push = 2.5 - Math.min(1, ci.t / ci.dur) * 0.6;
+      _cp.set(player.pos.x + fx * push + fz * 0.8, head + 0.1, player.pos.z + fz * push - fx * 0.8);
+      _cl.set(player.pos.x, head - 0.05, player.pos.z);
+      _bl.set(this.target.x, this.target.y + 0.05, this.target.z).lerp(_cl, w);
+      cam.position.lerp(_cp, w);
+      cam.lookAt(_bl);
+      if (ci.t >= ci.dur) this.cutIn = null;
+    }
 
     if (this.shakeT > 0) {
       this.shakeT -= dt;
