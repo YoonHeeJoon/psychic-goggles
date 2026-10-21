@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, VERT_HEAD, FRAG_HEAD, FRAG_TAIL, litUniforms } from './shaders.js';
+import { shared, VERT_HEAD, FRAG_HEAD, FRAG_TAIL, litUniforms, CLOUD_GLSL } from './shaders.js';
 
 // ---------------------------------------------------------------------------
 // Face lighting: instead of N.L (which gives blotchy shadows on a small head)
@@ -27,8 +27,29 @@ float faceLit(vec3 hp, vec3 F, vec3 Rt, vec3 L){
 // Anime toon material: two-tone ramp with tinted shadows, rim light, crisp
 // specular, optional root->tip colour gradient (hair) and texture.
 // ---------------------------------------------------------------------------
+// Hair tails, capes, skirts and scarves bend as a chain: every vertex turns
+// about the pivot by an angle growing with its distance down the chain
+// (t^2), plus a travelling flutter wave. Driven by spring physics on the CPU.
+export const CHAIN_GLSL = /* glsl */ `
+#ifdef CHAIN
+uniform vec4 uBend; // tip pitch, tip roll, flutter amplitude, flutter phase
+uniform float uChainLen;
+vec3 chainBend(vec3 p, inout vec3 n){
+  float t = clamp(-p.y / uChainLen, 0.0, 1.0);
+  float w = t * t;
+  float ax = uBend.x * w + sin(t * 6.5 - uBend.w + p.x * 8.0) * uBend.z * t;
+  float az = uBend.y * w + sin(t * 5.0 - uBend.w * 0.8 + p.z * 7.0) * uBend.z * 0.4 * t;
+  float cx = cos(ax), sx = sin(ax), cz = cos(az), sz = sin(az);
+  mat3 r = mat3(cz, sz, 0.0, -sz, cz, 0.0, 0.0, 0.0, 1.0) * mat3(1.0, 0.0, 0.0, 0.0, cx, sx, 0.0, -sx, cx);
+  n = r * n;
+  return r * p;
+}
+#endif
+`;
+
 const TOON_VERT = /* glsl */ `
 ${VERT_HEAD}
+${CHAIN_GLSL}
 attribute float aGrad;
 varying vec3 vNormalW;
 varying vec3 vWorldPos;
@@ -48,8 +69,13 @@ varying vec2 vUv;
   uniform vec3 uSunDir;
 #endif
 void main(){
-  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-  vec3 transformedNormal = normalMatrix * normal;
+  vec3 pos = position;
+  vec3 nrm = normal;
+  #ifdef CHAIN
+    pos = chainBend(pos, nrm);
+  #endif
+  vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
+  vec3 transformedNormal = normalMatrix * nrm;
   vNormalW = inverseTransformDirection(transformedNormal, viewMatrix);
   vWorldPos = worldPosition.xyz;
   vGrad = aGrad;
@@ -108,6 +134,7 @@ varying vec2 vUv;
   varying vec3 vHU;
 #endif
 ${FACE_GLSL}
+${CLOUD_GLSL}
 void main(){
   vec3 N = normalize(vNormalW);
   if (!gl_FrontFacing) N = -N;
@@ -115,7 +142,7 @@ void main(){
   vec3 albedo = mix(uColor, uColor2, smoothstep(0.3, 1.0, vGrad) * uGradAmt);
   if (uUseMap > 0.5) albedo *= texture2D(uMap, vUv).rgb;
   float ndl = dot(N, uSunDir);
-  float shadow = getShadowMask();
+  float shadow = getShadowMask() * cloudShadow(vWorldPos, uSunDir);
   float lit = smoothstep(uRampOffset - 0.04, uRampOffset + 0.06, ndl);
   #ifdef FACE
     float fw = smoothstep(0.05, 0.45, vHead.z / max(length(vHead), 1e-3));
@@ -151,7 +178,8 @@ void main(){
   #endif
   col += albedo * uEmissive;
   col = mix(col, vec3(1.0, 0.95, 0.9), uFlash);
-  gl_FragColor = vec4(col, uOpacity);
+  // alpha 0.98 marks cel-shaded characters for the AO pass
+  gl_FragColor = vec4(col, uOpacity * 0.98);
   ${FRAG_TAIL}
 }
 `;
@@ -159,8 +187,10 @@ void main(){
 const toonCache = new Map();
 
 export function toonMaterial(opts = {}) {
-  const key = JSON.stringify(opts, (k, v) => (v && v.isTexture ? v.uuid : v));
-  if (toonCache.has(key) && !opts.unique) return toonCache.get(key);
+  const chain = opts.chain;
+  const unique = opts.unique || !!chain;
+  const key = unique ? '' : JSON.stringify(opts, (k, v) => (v && v.isTexture ? v.uuid : v));
+  if (!unique && toonCache.has(key)) return toonCache.get(key);
   const c = new THREE.Color(opts.color ?? '#ffffff');
   const c2 = new THREE.Color(opts.color2 ?? opts.color ?? '#ffffff');
   const tint = new THREE.Color(opts.shadowTint ?? '#c9b8d8');
@@ -182,10 +212,19 @@ export function toonMaterial(opts = {}) {
     uUseMap: { value: opts.map ? 1 : 0 },
     uRing: { value: opts.ring ?? 0 },
     uHeadR: { value: opts.headR ?? 1 },
+    uCloudTex: shared.uCloudTex,
+    uCloudOff: shared.uCloudOff,
+    uCloudShadow: shared.uCloudShadow,
+    uCloudCov: shared.uCloudCov,
   });
   const defines = {};
   if (opts.face) defines.FACE = '';
   if (opts.ring) defines.HAIR = '';
+  if (chain) {
+    defines.CHAIN = '';
+    uniforms.uBend = chain.uBend;
+    uniforms.uChainLen = chain.uChainLen;
+  }
   const mat = new THREE.ShaderMaterial({
     vertexShader: TOON_VERT,
     fragmentShader: TOON_FRAG,
@@ -196,7 +235,7 @@ export function toonMaterial(opts = {}) {
     side: opts.side ?? THREE.FrontSide,
     transparent: (opts.opacity ?? 1) < 1,
   });
-  if (!opts.unique) toonCache.set(key, mat);
+  if (!unique) toonCache.set(key, mat);
   return mat;
 }
 
@@ -207,9 +246,15 @@ const OUTLINE_VERT = /* glsl */ `
 #include <common>
 #include <fog_pars_vertex>
 uniform float uWidth;
+${CHAIN_GLSL}
 void main(){
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-  vec3 n = normalize(normalMatrix * normal);
+  vec3 pos = position;
+  vec3 nrm = normal;
+  #ifdef CHAIN
+    pos = chainBend(pos, nrm);
+  #endif
+  vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+  vec3 n = normalize(normalMatrix * nrm);
   float dist = max(-mvPosition.z, 0.3);
   mvPosition.xyz += n * uWidth * clamp(dist, 0.8, 30.0) * 0.0016;
   gl_Position = projectionMatrix * mvPosition;
@@ -230,10 +275,11 @@ void main(){
 }
 `;
 const outlineCache = new Map();
-export function outlineMaterial(color = '#2a2230', width = 1) {
+export function outlineMaterial(color = '#2a2230', width = 1, chain = null) {
   const key = color + '|' + width;
-  if (outlineCache.has(key)) return outlineCache.get(key);
+  if (!chain && outlineCache.has(key)) return outlineCache.get(key);
   const mat = new THREE.ShaderMaterial({
+    defines: chain ? { CHAIN: '' } : {},
     vertexShader: OUTLINE_VERT,
     fragmentShader: OUTLINE_FRAG,
     uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
@@ -245,8 +291,24 @@ export function outlineMaterial(color = '#2a2230', width = 1) {
     side: THREE.BackSide,
     fog: true,
   });
-  outlineCache.set(key, mat);
+  if (chain) {
+    mat.uniforms.uBend = chain.uBend;
+    mat.uniforms.uChainLen = chain.uChainLen;
+  } else outlineCache.set(key, mat);
   return mat;
+}
+
+// Shadow-map material that bends like its chain, so capes and tails cast
+// matching shadows.
+export function chainDepthMaterial(chain) {
+  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uBend = chain.uBend;
+    sh.uniforms.uChainLen = chain.uChainLen;
+    sh.vertexShader = '#define CHAIN\n' + CHAIN_GLSL + sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = vec3(position);\nvec3 chainN = vec3(0.0, 1.0, 0.0);\ntransformed = chainBend(transformed, chainN);');
+  };
+  m.customProgramCacheKey = () => 'chain-depth';
+  return m;
 }
 
 // Darken + saturate a colour to use as its outline colour.
@@ -313,6 +375,12 @@ export function faceDecalMaterial(texture, headR = 1) {
     lights: true,
     transparent: true,
     depthWrite: false,
+    // keep the head's alpha marker underneath
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,

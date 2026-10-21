@@ -93,7 +93,7 @@ varying vec3 vWorldPos;
 varying float vWave;
 varying vec3 vN;
 void main(){
-  float shadow = getShadowMask();
+  float shadow = getShadowMask() * cloudShadow(vWorldPos, uSunDir);
   vec3 base = vAlbedo;
   vec3 tip = base * 1.32 + vec3(0.035, 0.03, 0.0);
   vec3 albedo = mix(base * 0.62, tip, smoothstep(0.0, 1.0, vT));

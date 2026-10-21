@@ -17,7 +17,72 @@ export const shared = {
   uPlayerPos: { value: new THREE.Vector3() },
   uNight: { value: 0 },
   uWet: { value: 0 }, // rain wetness 0..1 (weather)
+  // cloud shadows drifting over the land
+  uCloudTex: { value: null },
+  uCloudOff: { value: new THREE.Vector2() },
+  uCloudShadow: { value: 0 },
+  uCloudCov: { value: 0.5 },
 };
+
+// Tileable fbm value noise (R channel) for the cloud shadow layer.
+function cloudTexture(size = 128) {
+  const data = new Uint8Array(size * size);
+  const rnd = (x, y, p) => {
+    x = ((x % p) + p) % p;
+    y = ((y % p) + p) % p;
+    let h = (x * 374761393 + y * 668265263 + p * 982451653) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  const sm = (t) => t * t * (3 - 2 * t);
+  const vn = (x, y, p) => {
+    const xi = Math.floor(x),
+      yi = Math.floor(y);
+    const fx = sm(x - xi),
+      fy = sm(y - yi);
+    const a = rnd(xi, yi, p),
+      b = rnd(xi + 1, yi, p),
+      c = rnd(xi, yi + 1, p),
+      d = rnd(xi + 1, yi + 1, p);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  };
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      let v = 0,
+        amp = 0.5,
+        norm = 0;
+      for (let o = 0, p = 4; o < 5; o++, p *= 2) {
+        v += vn((x / size) * p, (y / size) * p, p) * amp;
+        norm += amp;
+        amp *= 0.5;
+      }
+      data[y * size + x] = Math.round((v / norm) * 255);
+    }
+  const t = new THREE.DataTexture(data, size, size, THREE.RedFormat, THREE.UnsignedByteType);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+}
+shared.uCloudTex.value = cloudTexture();
+
+// Shadow of the cloud layer (~260 m up) cast along the sun direction.
+export const CLOUD_GLSL = /* glsl */ `
+uniform sampler2D uCloudTex;
+uniform vec2 uCloudOff;
+uniform float uCloudShadow;
+uniform float uCloudCov;
+float cloudShadow(vec3 wp, vec3 L){
+  if (uCloudShadow <= 0.0) return 1.0;
+  vec2 q = wp.xz + L.xz / max(L.y, 0.3) * (260.0 - wp.y);
+  float n = texture2D(uCloudTex, q * 0.0024 + uCloudOff).r * 0.68
+          + texture2D(uCloudTex, q * 0.0061 - uCloudOff * 1.6).r * 0.32;
+  float th = mix(0.62, 0.42, uCloudCov);
+  return 1.0 - smoothstep(th, th + 0.07, n) * uCloudShadow;
+}
+`;
 
 // Terrain lookup uniforms (filled in by Terrain once generated).
 export const terrainUniforms = {
@@ -70,6 +135,7 @@ float hash12(vec2 p){
 `;
 
 export const LIGHT_GLSL = /* glsl */ `
+${CLOUD_GLSL}
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uSkyAmb;

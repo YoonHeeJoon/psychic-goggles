@@ -250,6 +250,8 @@ export class Environment {
 
     this._tmpA = {};
     this.overcast = 0; // set by Weather (0 clear .. 1 storm)
+    this.mistMul = 1; // the domain realm turns mist and cloud shadows off
+    this.cloudMul = 1;
     this.update(0, new THREE.Vector3());
   }
 
@@ -336,6 +338,7 @@ export class Environment {
     this.skyUniforms.uCloudCover.value = 0.5 + 0.5 * oc;
     this.skyUniforms.uOvercast.value = oc;
     this.scene.fog.density = this.fogBase * (1 + 1.4 * oc);
+    this.updateMist(t, p, oc, dt);
     const night = smoothstep(-2, -10, elevDeg);
     shared.uNight.value = night;
     shared.uZenith.value.copy(p.zen);
@@ -373,6 +376,28 @@ export class Environment {
 
     // shadow camera follows focus, snapped to texels to avoid shimmer
     this.updateShadow(focus);
+  }
+
+  // valley mist (screen-space height fog) and the drifting cloud shadows
+  updateMist(t, p, oc, dt) {
+    const dawn = smoothstep(4.4, 6.2, t) * smoothstep(9.6, 7.2, t);
+    const dusk = smoothstep(16.8, 18.4, t) * smoothstep(21, 19.2, t);
+    const night = shared.uNight.value;
+    const f = this.hfog || (this.hfog = { density: 0, base: 6, falloff: 0.1, color: new THREE.Color(), sun: new THREE.Color() });
+    f.density = (0.0008 + dawn * 0.011 + dusk * 0.003 + night * 0.004 + oc * 0.005) * this.mistMul;
+    f.base = 4 + dawn * 5;
+    f.falloff = 0.08 + dawn * 0.05;
+    f.color.copy(p.fog).lerp(p.sky, 0.25).multiplyScalar(1 + dawn * 0.25);
+    f.sun.copy(shared.uSunColor.value).multiplyScalar(0.22 + dawn * 0.3);
+    // shadows of the cloud layer, strongest under broken cloud by day
+    if (!this.paused) {
+      const w = shared.uWindDir.value;
+      shared.uCloudOff.value.x += w.x * dt * 0.012;
+      shared.uCloudOff.value.y += w.y * dt * 0.012;
+    }
+    const day = smoothstep(-1, 8, THREE.MathUtils.radToDeg(Math.asin(this.sunDir.y)));
+    shared.uCloudCov.value = 0.42 + 0.5 * oc;
+    shared.uCloudShadow.value = 0.62 * day * (1 - 0.5 * oc) * this.cloudMul;
   }
 
   updateShadow(focus) {

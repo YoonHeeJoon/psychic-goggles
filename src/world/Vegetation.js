@@ -316,7 +316,7 @@ void main(){
     albedo = mix(albedo * (1.0 + v), vec3(0.17, 0.33, 0.08) * (1.0 + v), m * 0.85);
   }
   albedo *= 1.0 - 0.2 * uWet;
-  float shadow = getShadowMask();
+  float shadow = getShadowMask() * cloudShadow(vWorldPos, uSunDir);
   vec3 col = stylize(albedo, n, shadow, 1.0, uWrap);
   vec3 V = normalize(cameraPosition - vWorldPos);
   if (uIsRock > 0.5) col += wetSheen(n, V, uWet * 0.7, shadow);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { shared, litUniforms, VERT_HEAD, FRAG_HEAD, FRAG_TAIL } from '../render/shaders.js';
+import { shared, litUniforms, VERT_HEAD, FRAG_HEAD, FRAG_TAIL, CLOUD_GLSL } from '../render/shaders.js';
 import { toonMaterial, outlineMaterial, outlineColorFor } from '../render/materials.js';
 import { lathe, smooth, strand, withGrad } from '../character/CharacterModel.js';
 import { resolveReaction, ELEMENT_COLORS } from './elements.js';
@@ -39,11 +39,12 @@ uniform float uFrozen;
 uniform float uOpacity;
 varying vec3 vNormalW;
 varying vec3 vWorldPos;
+${CLOUD_GLSL}
 void main(){
   vec3 N = normalize(vNormalW);
   vec3 V = normalize(cameraPosition - vWorldPos);
   float ndl = dot(N, uSunDir);
-  float shadow = getShadowMask();
+  float shadow = getShadowMask() * cloudShadow(vWorldPos, uSunDir);
   float lit = smoothstep(-0.2, 0.25, ndl) * mix(1.0, shadow, 0.8);
   vec3 col = mix(uColor * 0.5 * uCharShade, uColor * 1.02 * uCharLit, lit);
   float fr = pow(1.0 - max(dot(N, V), 0.0), 2.2);
@@ -70,6 +71,10 @@ function slimeMaterial(color, color2) {
       uFlash: { value: 0 },
       uFrozen: { value: 0 },
       uOpacity: { value: 1 },
+      uCloudTex: shared.uCloudTex,
+      uCloudOff: shared.uCloudOff,
+      uCloudShadow: shared.uCloudShadow,
+      uCloudCov: shared.uCloudCov,
     }),
     lights: true,
     fog: true,

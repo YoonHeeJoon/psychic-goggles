@@ -634,7 +634,7 @@ void main(){
   albedo = mix(albedo, albedo * 0.35, puddle);
   vec3 wetN = normalize(mix(lightN, vec3(0.0, 1.0, 0.0), puddle));
 
-  float shadow = getShadowMask();
+  float shadow = getShadowMask() * cloudShadow(vWorldPos, uSunDir);
   vec3 col = stylize(albedo, lightN, shadow, 1.0, 0.25 + rockAll * 0.1);
   vec3 V = normalize(cameraPosition - wp);
   vec3 H = normalize(uSunDir + V);

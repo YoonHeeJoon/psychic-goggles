@@ -5,12 +5,13 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GodRaysPass } from '../render/GodRays.js';
+import { AtmosPass, SceneGrab } from '../render/Atmos.js';
 
 export const PRESETS = {
-  low: { label: '낮음', pixelRatio: 0.75, shadowSize: 1024, shadowExtent: 45, grass: 45000, grassField: 56, terrainStep: 2, bloom: false, msaa: 0, trees: 0.5, rays: false },
-  medium: { label: '중간', pixelRatio: 1.0, shadowSize: 2048, shadowExtent: 55, grass: 110000, grassField: 70, terrainStep: 1, bloom: true, msaa: 2, trees: 0.8, rays: true },
-  high: { label: '높음', pixelRatio: 1.5, shadowSize: 2048, shadowExtent: 65, grass: 200000, grassField: 84, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0, rays: true },
-  ultra: { label: '최고', pixelRatio: 2.0, shadowSize: 4096, shadowExtent: 80, grass: 320000, grassField: 100, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0, rays: true },
+  low: { label: '낮음', pixelRatio: 0.75, shadowSize: 1024, shadowExtent: 45, grass: 45000, grassField: 56, terrainStep: 2, bloom: false, msaa: 0, trees: 0.5, rays: false, ao: 0 },
+  medium: { label: '중간', pixelRatio: 1.0, shadowSize: 2048, shadowExtent: 55, grass: 110000, grassField: 70, terrainStep: 1, bloom: true, msaa: 2, trees: 0.8, rays: true, ao: 8 },
+  high: { label: '높음', pixelRatio: 1.5, shadowSize: 2048, shadowExtent: 65, grass: 200000, grassField: 84, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0, rays: true, ao: 10 },
+  ultra: { label: '최고', pixelRatio: 2.0, shadowSize: 4096, shadowExtent: 80, grass: 320000, grassField: 100, terrainStep: 1, bloom: true, msaa: 4, trees: 1.0, rays: true, ao: 12 },
 };
 
 export function pickQuality() {
@@ -77,20 +78,28 @@ export class Renderer {
     container.appendChild(r.domElement);
     r.domElement.classList.add('game-canvas');
     this.renderer = r;
+    this.grab = new SceneGrab();
   }
 
   setup(scene, camera) {
     const r = this.renderer;
     const size = r.getDrawingBufferSize(new THREE.Vector2());
+    // the depth texture feeds ambient occlusion, height fog and the water
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
       type: THREE.HalfFloatType,
       samples: this.q.msaa,
+      depthTexture: new THREE.DepthTexture(size.x, size.y),
     });
     this.composer = new EffectComposer(r, rt);
+    // clone() shares the depth texture's GPU storage; each buffer needs its own
+    this.composer.renderTarget2.depthTexture = new THREE.DepthTexture(size.x, size.y);
     this.composer.setPixelRatio(r.getPixelRatio());
     this.composer.setSize(window.innerWidth, window.innerHeight);
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
+    this.atmos = new AtmosPass(camera);
+    this.atmos.setAO(this.q.ao > 0, this.q.ao || 10);
+    this.composer.addPass(this.atmos);
     this.rays = new GodRaysPass();
     this.rays.enabled = this.q.rays;
     this.composer.addPass(this.rays);
@@ -129,6 +138,7 @@ export class Renderer {
     }
     this.bloom.enabled = q.bloom;
     this.rays.enabled = q.rays;
+    this.atmos.setAO(q.ao > 0, q.ao || 10);
     this.resize(camera);
   }
 
@@ -146,6 +156,8 @@ export class Renderer {
   }
 
   render() {
+    // the scene pass draws into the composer's read buffer
+    this.grab.prepare(this.renderer, this.composer.readBuffer);
     this.composer.render();
   }
 }

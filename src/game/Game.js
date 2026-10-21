@@ -8,6 +8,7 @@ import { Water } from '../world/Water.js';
 import { Horizon } from '../world/Horizon.js';
 import { Weather } from '../world/Weather.js';
 import { Wildlife } from '../world/Wildlife.js';
+import { Footprints } from '../world/Footprints.js';
 import { Gathering } from '../world/Gathering.js';
 import { NPCs } from '../world/NPCs.js';
 import { Bag, CookPanel, BuffBar } from '../ui/Panels.js';
@@ -96,7 +97,7 @@ export class Game {
     loader.set(0.35, '하늘과 바다를 칠하는 중...');
     await nextFrame();
     this.env = new Environment(this.scene, q);
-    this.water = new Water(this.scene);
+    this.water = new Water(this.scene, this.rendererW.grab);
     this.horizon = new Horizon(this.scene);
 
     loader.set(0.5, '풀과 나무를 심는 중...');
@@ -115,6 +116,7 @@ export class Game {
     this.progression = new Progression(this);
     this.weather = new Weather(this);
     this.wildlife = new Wildlife(this);
+    this.footprints = new Footprints(this.scene, this.ground);
     this.gathering.build();
     this.npcs = new NPCs(this);
     this.boss = new Boss(this);
@@ -629,6 +631,7 @@ export class Game {
     if (th > 126) return 'snow';
     if (Math.hypot(x - LANDMARKS.village.x, z - LANDMARKS.village.z) < 15) return 'stone';
     if (this.terrain.pathDistance(x, z) < 2.4) return 'path';
+    if (th < 2.2) return 'sand';
     if (this.terrain.grassAt(x, z) < 0.22) return 'stone';
     return 'grass';
   }
@@ -797,6 +800,7 @@ export class Game {
       col.setRGB(0.5, 0.62, 1.0).multiplyScalar(0.1);
       this.rendererW.updateRays(this.camera, env.moonDir, col, shared.uNight.value * (1 - this.weather.overcast));
     }
+    this.rendererW.atmos.setFog(env.hfog, s, shared.uTime.value, shared.uWindDir.value);
   }
 
   update(dt) {
@@ -865,11 +869,15 @@ export class Game {
       this.env.update(dt, P.pos);
     }
     this.env.followCamera(this.camera);
-    this.water.update(this.camera);
+    this.water.update(this.camera, this.state === 'paused' ? 0 : dt, this.state === 'playing' ? P : null);
     this.vegetation.update(this.camera);
     if (this.state !== 'paused') this.wildlife.update(dt);
     this.grass.update(this.state === 'playing' ? P.pos : this.camera.position);
     shared.uPlayerPos.value.copy(P.pos);
+    if (this.state === 'playing' && P.model.steps !== this.fpSteps) {
+      this.fpSteps = P.model.steps;
+      this.footprints.step(P, this.surfaceAt());
+    }
     this.updateAudio(dt);
 
     if (this.state === 'playing' || this.state === 'paused') this.updateHUD(dt);

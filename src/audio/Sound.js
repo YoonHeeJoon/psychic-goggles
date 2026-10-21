@@ -368,6 +368,11 @@ export class Sound {
         this.nz({ f: 750 * r, q: 0.7, a: 0.01, d: 0.16, gain: 0.12 * v, buf: 'pink' });
         this.tone({ f: 420 * r, f2: 900, d: 0.06, gain: 0.035 * v, delay: 0.03 });
         break;
+      case 'sand':
+        // soft crunch that sinks in
+        this.nz({ f: 1500 * r, q: 0.6, a: 0.012, d: 0.09, gain: 0.08 * v, buf: 'pink' });
+        this.nz({ type: 'lowpass', f: 220, q: 0.7, d: 0.06, gain: 0.12 * v, buf: 'brown' });
+        break;
       case 'path':
         this.nz({ f: 1700 * r, q: 1.1, d: 0.05, gain: 0.1 * v });
         this.nz({ type: 'lowpass', f: 300, q: 0.7, d: 0.05, gain: 0.1 * v, buf: 'brown' });

@@ -49,8 +49,24 @@ Chromium screenshots, then commits.
 - [x] Ambient music: procedural day / night / battle themes that cross-fade
 - [x] Achievements / adventure log, photo mode
 
-## Iteration 8 — beauty pass
-- [ ] Screen-space ambient occlusion and contact shadows tuned for the toon look
-- [ ] Better water: refraction of the lake bed, shoreline waves, foam trails behind swimmers
-- [ ] Cloud shadows sweeping over the land, volumetric fog in valleys at dawn
-- [ ] Character hair/cloth physics chains, footprints in sand and snow
+## Iteration 8 — beauty pass ✅
+- [x] Screen-space ambient occlusion and contact shadows tuned for the toon look
+  (half-res, depth-aware blur, cool tinted, characters masked via alpha 0.98)
+- [x] Better water: refraction of the lake bed, shoreline waves, foam trails behind swimmers
+  (frame copied by a framebuffer blit right before the water draws; per-channel absorption, caustics,
+  contact foam, rollers by distance-to-shore, swash, wake rings)
+- [x] Cloud shadows sweeping over the land, volumetric fog in valleys at dawn
+  (cloud layer projected along the sun on every lit material; analytic height fog with drifting noise)
+- [x] Character hair/cloth physics chains, footprints in sand and snow
+  (vertex bend driven by a lagging tip spring + flutter, matching outline and shadow; instanced multiply decals)
+
+## Iteration 9 — a second region
+- [ ] Autumn highlands across a long rope bridge: maple forests, terraced fields, a cliffside port town
+- [ ] New enemy families: goblin archers (ranged), shield brutes (break the guard), floating elemental casters, elite variants
+- [ ] Enemy camps with watchtowers and loot, a second quest chapter with a short cutscene
+- [ ] Region-specific music theme, map and minimap support for the new area
+
+## Iteration 10 — systems depth
+- [ ] Weapons and artifacts (stats, refinement), a simple gacha-free unlock path
+- [ ] Daily commissions, reputation, a shop UI
+- [ ] Co-op ready refactor: deterministic combat events, save versioning

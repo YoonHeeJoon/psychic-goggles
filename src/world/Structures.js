@@ -311,7 +311,7 @@ void main(){
   float ao = mix(uAO, 1.0, smoothstep(-0.2, 1.5, above));
   float wet = uWet * smoothstep(-0.2, 0.6, n.y + 0.3);
   alb *= 1.0 - 0.3 * wet;
-  float shadow = getShadowMask();
+  float shadow = getShadowMask() * cloudShadow(vW, uSunDir);
   vec3 col = stylize(alb, n, shadow, ao, uWrap);
   vec3 V = normalize(cameraPosition - vW);
   col += wetSheen(n, V, wet * 0.8, shadow);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { toonMaterial, outlineMaterial, outlineColorFor, faceDecalMaterial, glowMaterial } from '../render/materials.js';
+import { toonMaterial, outlineMaterial, outlineColorFor, faceDecalMaterial, glowMaterial, chainDepthMaterial } from '../render/materials.js';
 import { ELEMENTS } from './characters.js';
 import { smoothstep, lerp, clamp, damp, mulberry32 } from '../core/noise.js';
 
@@ -522,12 +522,34 @@ export class CharacterModel {
       face: opts.face,
       headR: opts.headR,
       ring: opts.ring,
+      chain: opts.chain,
     });
+  }
+
+  // a bendable chain hung from a pivot (hair tail, cape, skirt, scarf)
+  chain(obj, len, o = {}) {
+    const ch = { uBend: { value: new THREE.Vector4() }, uChainLen: { value: len } };
+    this.springs.push({
+      obj,
+      chain: ch,
+      gain: o.gain ?? 1,
+      k: o.k ?? 50,
+      d: o.d ?? 8,
+      lag: o.lag ?? 0.5, // tip stiffness relative to the root
+      bendK: o.bendK ?? 1.6,
+      flutter: o.flutter ?? 0,
+      ang: V3(0, 0, 0),
+      vel: V3(0, 0, 0),
+      tip: V3(0, 0, 0),
+      tipV: V3(0, 0, 0),
+    });
+    return ch;
   }
 
   add(parent, geo, color, opts = {}) {
     const mat = opts.material ?? this.mat(color, opts);
     const mesh = new THREE.Mesh(geo, mat);
+    if (opts.chain) mesh.customDepthMaterial = chainDepthMaterial(opts.chain);
     if (opts.pos) mesh.position.copy(opts.pos);
     if (opts.rot) mesh.rotation.set(opts.rot.x, opts.rot.y, opts.rot.z);
     if (opts.scale) mesh.scale.copy(opts.scale);
@@ -535,7 +557,7 @@ export class CharacterModel {
     mesh.receiveShadow = true;
     parent.add(mesh);
     if (opts.outline !== false) {
-      const om = new THREE.Mesh(geo, outlineMaterial(opts.outlineColor ?? outlineColorFor(color), opts.outlineWidth ?? 1));
+      const om = new THREE.Mesh(geo, outlineMaterial(opts.outlineColor ?? outlineColorFor(color), opts.outlineWidth ?? 1, opts.chain));
       om.castShadow = false;
       om.receiveShadow = false;
       mesh.add(om);
@@ -693,16 +715,16 @@ export class CharacterModel {
     backPivot.position.set(0, R * 0.5, -R * 0.2);
     headGroup.add(backPivot);
     hair.back.translate(0, -R * 0.5, R * 0.2);
-    this.add(backPivot, hair.back, c.hair, hairOpts);
-    this.springs.push({ obj: backPivot, gain: 0.7, ang: V3(0, 0, 0), vel: V3(0, 0, 0), k: 60, d: 9 });
+    const backChain = this.chain(backPivot, R * 2.6, { gain: 0.7, k: 60, d: 9, lag: 0.6, bendK: 1.0 });
+    this.add(backPivot, hair.back, c.hair, { ...hairOpts, chain: backChain });
     for (const t of hair.tails) {
       const piv = new THREE.Group();
       piv.position.copy(t.anchor);
       headGroup.add(piv);
-      this.add(piv, t.geo, c.hair, hairOpts);
+      const ch = this.chain(piv, R * 3.8, { gain: 1.1, k: 38, d: 6, lag: 0.42, bendK: 2.0, flutter: 0.25 });
+      this.add(piv, t.geo, c.hair, { ...hairOpts, chain: ch });
       const tie = new THREE.TorusGeometry(R * 0.16, R * 0.06, 6, 14);
       this.add(piv, tie, c.outfit2, { pos: V3(0, 0, 0), rot: V3(0.4, 0, 0) });
-      this.springs.push({ obj: piv, gain: 1.2, ang: V3(0, 0, 0), vel: V3(0, 0, 0), k: 40, d: 6 });
     }
 
     // ---- arms
@@ -816,28 +838,33 @@ export class CharacterModel {
       const skirtPivot = new THREE.Group();
       skirtPivot.position.y = 0.04;
       j.hips.add(skirtPivot);
+      const len = o.skirt === 'long' ? 0.5 : o.skirt === 'coat' ? 0.44 : 0.27;
+      const ch = this.chain(skirtPivot, len, { gain: 0.25, k: 90, d: 12, lag: 0.55, bendK: 0.9, flutter: 0.05 });
+      const so = { side: THREE.DoubleSide, chain: ch };
       if (o.skirt === 'pleated') {
-        this.add(skirtPivot, skirtGeo(0.118 * sh, 0.25, 0.27, 12, 0.07), c.outfit2, { side: THREE.DoubleSide });
-        this.add(skirtPivot, skirtGeo(0.121 * sh, 0.235, 0.21, 12, 0.08), c.outfit, { side: THREE.DoubleSide });
+        this.add(skirtPivot, skirtGeo(0.118 * sh, 0.25, 0.27, 12, 0.07), c.outfit2, so);
+        this.add(skirtPivot, skirtGeo(0.121 * sh, 0.235, 0.21, 12, 0.08), c.outfit, so);
       } else if (o.skirt === 'flare') {
-        this.add(skirtPivot, skirtGeo(0.118 * sh, 0.27, 0.24, 9, 0.1), c.outfit2, { side: THREE.DoubleSide });
-        this.add(skirtPivot, skirtGeo(0.12 * sh, 0.25, 0.18, 9, 0.06), c.outfit, { side: THREE.DoubleSide });
+        this.add(skirtPivot, skirtGeo(0.118 * sh, 0.27, 0.24, 9, 0.1), c.outfit2, so);
+        this.add(skirtPivot, skirtGeo(0.12 * sh, 0.25, 0.18, 9, 0.06), c.outfit, so);
       } else if (o.skirt === 'long') {
-        this.add(skirtPivot, skirtGeo(0.118 * sh, 0.28, 0.5, 8, 0.06), c.outfit, { side: THREE.DoubleSide });
-        this.add(skirtPivot, skirtGeo(0.121 * sh, 0.2, 0.16, 8, 0.05), c.outfit2, { side: THREE.DoubleSide });
+        this.add(skirtPivot, skirtGeo(0.118 * sh, 0.28, 0.5, 8, 0.06), c.outfit, so);
+        this.add(skirtPivot, skirtGeo(0.121 * sh, 0.2, 0.16, 8, 0.05), c.outfit2, so);
       } else if (o.skirt === 'coat') {
-        this.add(skirtPivot, skirtGeo(0.127 * sh, 0.24, 0.44, 6, 0.05, 0.8, 1.3), c.outfit, { side: THREE.DoubleSide });
+        this.add(skirtPivot, skirtGeo(0.127 * sh, 0.24, 0.44, 6, 0.05, 0.8, 1.3), c.outfit, so);
+        // trim baked into place so its chain position is right
         const trim = skirtGeo(0.129 * sh, 0.205, 0.08, 6, 0.0, 0.8, 1.3);
-        this.add(skirtPivot, trim, c.outfit2, { side: THREE.DoubleSide, pos: V3(0, -0.36, 0), scale: V3(1.17, 1, 1.17) });
+        trim.scale(1.17, 1, 1.17);
+        trim.translate(0, -0.36, 0);
+        this.add(skirtPivot, trim, c.outfit2, so);
       }
-      this.springs.push({ obj: skirtPivot, gain: 0.25, ang: V3(0, 0, 0), vel: V3(0, 0, 0), k: 90, d: 12 });
     }
     if (o.cape) {
       const capePivot = new THREE.Group();
       capePivot.position.set(0, 0.19, -0.02);
       j.chest.add(capePivot);
-      this.add(capePivot, capeGeo(0.11, 0.24, 0.52, Math.PI * 0.8), c.outfit2, { side: THREE.DoubleSide });
-      this.springs.push({ obj: capePivot, gain: 0.8, ang: V3(0, 0, 0), vel: V3(0, 0, 0), k: 45, d: 7 });
+      const ch = this.chain(capePivot, 0.52, { gain: 0.8, k: 45, d: 7, lag: 0.4, bendK: 1.8, flutter: 0.3 });
+      this.add(capePivot, capeGeo(0.11, 0.24, 0.52, Math.PI * 0.8), c.outfit2, { side: THREE.DoubleSide, chain: ch });
     }
     if (o.coat) {
       // scarf
@@ -848,8 +875,8 @@ export class CharacterModel {
       const piv = new THREE.Group();
       piv.position.set(0.03, 0.2, -0.06);
       j.chest.add(piv);
-      this.add(piv, withGrad(tailG), c.outfit2, { side: THREE.DoubleSide });
-      this.springs.push({ obj: piv, gain: 1.1, ang: V3(0, 0, 0), vel: V3(0, 0, 0), k: 40, d: 6 });
+      const ch = this.chain(piv, 0.26, { gain: 1.1, k: 40, d: 6, lag: 0.4, bendK: 2.2, flutter: 0.55 });
+      this.add(piv, withGrad(tailG), c.outfit2, { side: THREE.DoubleSide, chain: ch });
     }
 
     this.buildWeapon();
@@ -1238,12 +1265,22 @@ export class CharacterModel {
     const fwd = st.localVel ? st.localVel.z : 0;
     const side = st.localVel ? st.localVel.x : 0;
     const vy = st.localVel ? st.localVel.y : 0;
+    // turning swings hair and cloth outwards
+    const yaw = this.root.rotation.y;
+    let dYaw = this.prevYaw === undefined ? 0 : yaw - this.prevYaw;
+    dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+    this.prevYaw = yaw;
+    const yawRate = dt > 0 ? clamp(dYaw / dt, -8, 8) : 0;
+    this.yawRate = damp(this.yawRate || 0, yawRate, 10, dt);
     let tx = clamp(fwd * 0.07 + Math.max(-vy, 0) * 0.05, -0.2, 1.0);
     if (st.mode === 'glide') tx = 1.0;
     if (st.mode === 'swim') tx = 0.3;
-    const tz = clamp(-side * 0.05, -0.4, 0.4);
+    const tz = clamp(-side * 0.05 - this.yawRate * 0.07, -0.45, 0.45);
+    const speed = Math.hypot(fwd, side);
     const steps = Math.min(4, Math.ceil(dt / (1 / 120)));
     const h = dt / steps;
+    this.flutterPh = (this.flutterPh || 0) + dt * (5 + speed * 0.9 + (st.mode === 'glide' ? 6 : 0));
+    const wind = 0.35 + speed * 0.09 + (st.mode === 'glide' ? 1.2 : 0) + (st.mode === 'fall' ? 0.6 : 0);
     for (const s of this.springs) {
       const targetX = tx * s.gain + Math.sin(this.t * 1.7 + s.gain) * 0.02;
       const targetZ = tz * s.gain;
@@ -1252,9 +1289,25 @@ export class CharacterModel {
         s.vel.z += (s.k * (targetZ - s.ang.z) - s.d * s.vel.z) * h;
         s.ang.x += s.vel.x * h;
         s.ang.z += s.vel.z * h;
+        if (s.chain) {
+          // the tip chases the root more loosely, so it trails and whips
+          const k2 = s.k * s.lag,
+            d2 = s.d * Math.sqrt(s.lag);
+          s.tipV.x += (k2 * (s.ang.x - s.tip.x) - d2 * s.tipV.x) * h;
+          s.tipV.z += (k2 * (s.ang.z - s.tip.z) - d2 * s.tipV.z) * h;
+          s.tip.x += s.tipV.x * h;
+          s.tip.z += s.tipV.z * h;
+        }
       }
       s.obj.rotation.x = clamp(s.ang.x, -0.5, 1.3);
       s.obj.rotation.z = clamp(s.ang.z, -0.6, 0.6);
+      if (s.chain) {
+        const b = s.chain.uBend.value;
+        b.x = clamp((s.tip.x - s.ang.x) * s.bendK, -0.9, 0.9);
+        b.y = clamp((s.tip.z - s.ang.z) * s.bendK, -0.7, 0.7);
+        b.z = s.flutter * Math.min(wind, 1.6) * 0.18;
+        b.w = this.flutterPh;
+      }
     }
   }
 }
