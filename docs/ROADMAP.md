@@ -103,7 +103,33 @@ Chromium screenshots, then commits.
   (an ice character in front freezes hex floes underfoot that really carry you, then melt; ice skills freeze water;
   a chest frozen in ice (melt with fire) and a cracked boulder (earth or heavy blows))
 
-## Iteration 13 — the frozen summit
+## Character quality track (C1–C5) — raising the heroes to a modern anime-action look
+C1 ✅ faces and hair
+- [x] New anime skull: soft cranium, flat face, narrow V jaw with a forward chin, a small nose
+- [x] Face drawn in the head shader instead of a decal: shared feature masks per eye style (lash ink, brows,
+  blush, eye whites), a per-character layered iris (dark lid band, bright lower crescent, streaks, catch-lights)
+  that slides inside the eye, closed-lid variant for blinks, and a mouth atlas (rest / talk / shout / hurt)
+- [x] Six eye styles (round, sharp, soft, male, sharp male, elder); brows and lash lines show faintly through the fringe
+- [x] Hair rebuilt from locks: ridged scalp cap, a two-layer fringe from the parting with sharp tips, side locks,
+  crown locks for volume, layered back locks that hang over capes, fuller pony/twin tails, painted strand lines
+- [x] Soft fringe shadow on the forehead, lighter warm face shadows
+- [x] Eyes and head turn to look at the camera or the person talking; expressions on skills, swings, hits and speech
+
+C2 — bodies and outfits (next)
+- [ ] Smooth skinned body (no seams at shoulders, elbows, knees), better proportions and hands
+- [ ] Layered outfits with trims, gold filigree, straps, buckles and an elemental emblem on each hero
+- [ ] Per-material shading: metal, cloth, skin and leather ramps
+
+C3 — motion
+- [ ] Relaxed idle stance with weight shift, better run/sprint cycles, hand poses, foot placement on slopes
+
+C4 — signature looks
+- [ ] Character-specific accessories (hairpins, hats, earrings, gloves), weapon redesigns
+
+C5 — presentation
+- [ ] Character showcase lighting, outline tuning by distance, rim light from the depth buffer
+
+## Iteration 13 — the frozen summit (paused; summit, cold and frost giant modules are in place but not wired in)
 - [ ] Chapter 3: climb the frozen summit with the new companions (ice paths and pillars as part of the route)
 - [ ] Biting cold on the peak: a cold meter, warmth from braziers and fire, blizzard weather above the treeline
 - [ ] A second world boss on the summit with its own arena and phases

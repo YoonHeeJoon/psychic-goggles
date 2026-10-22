@@ -124,6 +124,8 @@ export class Game {
     loader.set(0.75, '여행자를 깨우는 중...');
     await nextFrame();
     this.player = new Player(this);
+    // party members glance at the camera when it swings round in front
+    for (const c of this.player.roster) c.model.lookTarget = this.camera.position;
     this.cameraCtl = new CameraController(this.camera, this.ground, this.vegetation.colliders);
     this.cameraCtl.yaw = 0;
     this.combat = new Combat(this);

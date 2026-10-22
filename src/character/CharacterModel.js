@@ -1,433 +1,13 @@
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { toonMaterial, outlineMaterial, outlineColorFor, faceDecalMaterial, glowMaterial, chainDepthMaterial } from '../render/materials.js';
+import { toonMaterial, outlineMaterial, outlineColorFor, faceOverlayMaterial, glowMaterial, chainDepthMaterial } from '../render/materials.js';
+import { lathe, smooth, strand, withGrad } from './geom.js';
+import { buildHeadGeo, faceUniforms } from './Face.js';
+import { buildHair } from './Hair.js';
 import { ELEMENTS } from './characters.js';
 import { smoothstep, lerp, clamp, damp, mulberry32 } from '../core/noise.js';
 
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-const DEG = Math.PI / 180;
-
-// ---------------------------------------------------------------------------
-// geometry helpers
-// ---------------------------------------------------------------------------
-function lathe(profile, segs = 22) {
-  return new THREE.LatheGeometry(
-    profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 1e-4), y)),
-    segs
-  );
-}
-
-function smooth(geo) {
-  geo.deleteAttribute('normal');
-  if (geo.attributes.uv) geo.deleteAttribute('uv');
-  const g = mergeVertices(geo, 1e-5);
-  g.computeVertexNormals();
-  return g;
-}
-
-function sph(elevDeg, azDeg, r) {
-  const e = elevDeg * DEG,
-    a = azDeg * DEG;
-  return V3(Math.sin(a) * Math.cos(e) * r, Math.sin(e) * r, Math.cos(a) * Math.cos(e) * r);
-}
-
-// Flat-ish hair ribbon with elliptical cross-section following a curve.
-// `center` orients the flat side outward from the head.
-function strand(points, width, thick, center, opts = {}) {
-  const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.5);
-  const segs = opts.segs ?? 12;
-  const rad = opts.rad ?? 7;
-  const pos = [],
-    nor = [],
-    grad = [],
-    uv = [],
-    idx = [];
-  const P = new THREE.Vector3(),
-    T = new THREE.Vector3(),
-    O = new THREE.Vector3(),
-    S = new THREE.Vector3(),
-    tmp = new THREE.Vector3();
-  const taper = opts.taper ?? ((t) => Math.max(0.04, Math.pow(1 - t, 0.85) * (1 + 0.35 * Math.sin(t * Math.PI))));
-  for (let i = 0; i <= segs; i++) {
-    const t = i / segs;
-    curve.getPointAt(t, P);
-    curve.getTangentAt(t, T);
-    O.copy(P).sub(center);
-    O.addScaledVector(T, -O.dot(T));
-    if (O.lengthSq() < 1e-10) O.set(0, 0, 1);
-    O.normalize();
-    S.crossVectors(T, O).normalize();
-    const k = taper(t);
-    const w = width * k,
-      th = thick * Math.max(k, 0.25);
-    for (let j = 0; j <= rad; j++) {
-      const a = (j / rad) * Math.PI * 2;
-      const c = Math.cos(a),
-        s = Math.sin(a);
-      tmp.copy(P).addScaledVector(S, c * w).addScaledVector(O, s * th);
-      pos.push(tmp.x, tmp.y, tmp.z);
-      const nx = c / Math.max(w, 1e-4),
-        ny = s / Math.max(th, 1e-4);
-      const nl = Math.hypot(nx, ny) || 1;
-      tmp.set(0, 0, 0).addScaledVector(S, nx / nl).addScaledVector(O, ny / nl).normalize();
-      nor.push(tmp.x, tmp.y, tmp.z);
-      grad.push(t);
-      uv.push(j / rad, t);
-    }
-  }
-  for (let i = 0; i < segs; i++)
-    for (let j = 0; j < rad; j++) {
-      const a = i * (rad + 1) + j,
-        b = a + rad + 1;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
-    }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute('aGrad', new THREE.Float32BufferAttribute(grad, 1));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setIndex(idx);
-  return g;
-}
-
-function withGrad(geo, value = 0) {
-  const n = geo.attributes.position.count;
-  geo.setAttribute('aGrad', new THREE.Float32BufferAttribute(new Float32Array(n).fill(value), 1));
-  if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
-  return geo;
-}
-
-function deformHead(geo, R) {
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i),
-      y = p.getY(i),
-      z = p.getZ(i);
-    const ny = y / R;
-    if (ny < 0) {
-      const t = smoothstep(0, -1, ny);
-      x *= 1 - 0.34 * Math.pow(t, 1.1);
-      if (z < 0) z *= 1 - 0.32 * t;
-      else z *= 1 - 0.06 * t;
-      y *= 1 + 0.16 * t;
-    } else {
-      y *= 1.03;
-    }
-    x *= 0.95;
-    p.setXYZ(i, x, y, z);
-  }
-  p.needsUpdate = true;
-}
-
-// ---------------------------------------------------------------------------
-// Face texture (big anime eyes drawn on a canvas, projected on the head)
-// ---------------------------------------------------------------------------
-const FACE_W = 1024,
-  FACE_H = 576;
-const PHI0 = 15,
-  PHI_LEN = 150,
-  TH0 = 50,
-  TH_LEN = 85;
-
-function faceMap(x, y) {
-  const th = Math.acos(clamp(y, -0.999, 0.999));
-  const st = Math.sin(th);
-  const ph = Math.acos(clamp(-x / st, -1, 1));
-  return [((ph / DEG - PHI0) / PHI_LEN) * FACE_W, ((th / DEG - TH0) / TH_LEN) * FACE_H];
-}
-
-function shade(hex, k) {
-  const c = new THREE.Color(hex);
-  c.convertLinearToSRGB();
-  return `rgb(${Math.round(clamp(c.r * k, 0, 1) * 255)},${Math.round(clamp(c.g * k, 0, 1) * 255)},${Math.round(clamp(c.b * k, 0, 1) * 255)})`;
-}
-
-function drawFace(cfg, closed) {
-  const cv = document.createElement('canvas');
-  cv.width = FACE_W;
-  cv.height = FACE_H;
-  const g = cv.getContext('2d');
-  const S = 390;
-  const col = cfg.colors;
-  const lash = '#2a1c26';
-  const fem = cfg.female;
-
-  // blush
-  for (const s of [-1, 1]) {
-    const [bx, by] = faceMap(s * 0.47, -0.36);
-    const rg = g.createRadialGradient(bx, by, 0, bx, by, S * 0.14);
-    rg.addColorStop(0, fem ? 'rgba(255,120,130,0.35)' : 'rgba(255,130,120,0.18)');
-    rg.addColorStop(1, 'rgba(255,120,130,0)');
-    g.fillStyle = rg;
-    g.beginPath();
-    g.ellipse(bx, by, S * 0.16, S * 0.09, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-
-  // eyes
-  const ew = S * (fem ? 0.33 : 0.3);
-  const eh = S * (fem ? 0.39 : 0.31);
-  for (const s of [-1, 1]) {
-    const [cx, cy] = faceMap(s * 0.37, -0.11);
-    g.save();
-    g.translate(cx, cy);
-    g.scale(s, 1); // +x -> outer corner
-    if (fem) g.rotate(-0.04);
-    else g.rotate(-0.1);
-    const w = ew,
-      h = eh;
-    if (closed) {
-      g.strokeStyle = lash;
-      g.lineCap = 'round';
-      g.lineWidth = h * 0.075;
-      g.beginPath();
-      g.moveTo(-w * 0.5, h * 0.02);
-      g.quadraticCurveTo(0, h * 0.2, w * 0.52, -h * 0.06);
-      g.stroke();
-      g.lineWidth = h * 0.05;
-      g.beginPath();
-      g.moveTo(w * 0.45, -h * 0.03);
-      g.lineTo(w * 0.62, -h * 0.12);
-      g.stroke();
-    } else {
-      const eyePath = () => {
-        g.beginPath();
-        g.moveTo(-w * 0.5, -h * 0.02);
-        g.bezierCurveTo(-w * 0.36, -h * 0.56, w * 0.28, -h * 0.64, w * 0.52, -h * 0.24);
-        g.bezierCurveTo(w * 0.56, h * 0.22, w * 0.18, h * 0.52, -w * 0.04, h * 0.5);
-        g.bezierCurveTo(-w * 0.34, h * 0.46, -w * 0.52, h * 0.22, -w * 0.5, -h * 0.02);
-        g.closePath();
-      };
-      eyePath();
-      g.fillStyle = '#f7f6ff';
-      g.fill();
-      g.save();
-      eyePath();
-      g.clip();
-      // iris
-      const ix = w * 0.02,
-        iy = h * 0.07;
-      const irx = w * 0.4,
-        iry = h * 0.47;
-      const lg = g.createLinearGradient(0, iy - iry, 0, iy + iry);
-      lg.addColorStop(0, shade(col.eye, 0.35));
-      lg.addColorStop(0.45, shade(col.eye, 0.95));
-      lg.addColorStop(1, shade(col.eye2, 1.0));
-      g.fillStyle = lg;
-      g.beginPath();
-      g.ellipse(ix, iy, irx, iry, 0, 0, Math.PI * 2);
-      g.fill();
-      g.strokeStyle = shade(col.eye, 0.3);
-      g.lineWidth = 4;
-      g.stroke();
-      // pupil
-      g.fillStyle = shade(col.eye, 0.22);
-      g.beginPath();
-      g.ellipse(ix, iy - h * 0.04, w * 0.16, h * 0.23, 0, 0, Math.PI * 2);
-      g.fill();
-      // lower glow
-      g.globalAlpha = 0.75;
-      const rg = g.createRadialGradient(ix, iy + h * 0.3, 0, ix, iy + h * 0.3, w * 0.32);
-      rg.addColorStop(0, shade(col.eye2, 1.15));
-      rg.addColorStop(1, 'rgba(255,255,255,0)');
-      g.fillStyle = rg;
-      g.beginPath();
-      g.ellipse(ix, iy + h * 0.3, w * 0.34, h * 0.18, 0, 0, Math.PI * 2);
-      g.fill();
-      g.globalAlpha = 1;
-      // eyelid shadow
-      const sg = g.createLinearGradient(0, -h * 0.6, 0, -h * 0.05);
-      sg.addColorStop(0, 'rgba(60,30,60,0.65)');
-      sg.addColorStop(1, 'rgba(60,30,60,0)');
-      g.fillStyle = sg;
-      g.fillRect(-w, -h, w * 2, h);
-      g.restore();
-      // highlights
-      g.fillStyle = '#ffffff';
-      g.beginPath();
-      g.ellipse(ix - w * 0.13, iy - h * 0.16, w * 0.11, h * 0.09, -0.3, 0, Math.PI * 2);
-      g.fill();
-      g.globalAlpha = 0.9;
-      g.beginPath();
-      g.arc(ix + w * 0.17, iy + h * 0.2, w * 0.045, 0, Math.PI * 2);
-      g.fill();
-      g.globalAlpha = 1;
-      // upper lash
-      g.strokeStyle = lash;
-      g.lineCap = 'round';
-      g.lineJoin = 'round';
-      g.lineWidth = h * (fem ? 0.085 : 0.07);
-      g.beginPath();
-      g.moveTo(-w * 0.5, -h * 0.0);
-      g.bezierCurveTo(-w * 0.36, -h * 0.56, w * 0.28, -h * 0.64, w * 0.53, -h * 0.25);
-      g.stroke();
-      if (fem) {
-        // outer flick
-        g.fillStyle = lash;
-        g.beginPath();
-        g.moveTo(w * 0.36, -h * 0.47);
-        g.quadraticCurveTo(w * 0.62, -h * 0.4, w * 0.7, -h * 0.2);
-        g.quadraticCurveTo(w * 0.56, -h * 0.26, w * 0.5, -h * 0.18);
-        g.closePath();
-        g.fill();
-      }
-      // lower lash hint
-      g.globalAlpha = 0.55;
-      g.lineWidth = 3;
-      g.beginPath();
-      g.moveTo(w * 0.5, h * 0.06);
-      g.quadraticCurveTo(w * 0.4, h * 0.42, w * 0.12, h * 0.5);
-      g.stroke();
-      g.globalAlpha = 1;
-    }
-    g.restore();
-
-    // brows
-    const [bx, by] = faceMap(s * 0.37, 0.27);
-    g.save();
-    g.translate(bx, by);
-    g.scale(s, 1);
-    g.strokeStyle = shade(col.hair, 0.45);
-    g.lineWidth = fem ? 6 : 9;
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(-ew * 0.45, fem ? 6 : 10);
-    g.quadraticCurveTo(0, fem ? -10 : -4, ew * 0.5, fem ? 2 : -8);
-    g.stroke();
-    g.restore();
-  }
-
-  // nose hint
-  const [nx, ny] = faceMap(0.03, -0.34);
-  g.strokeStyle = 'rgba(190,110,100,0.45)';
-  g.lineWidth = 3;
-  g.beginPath();
-  g.moveTo(nx - 2, ny - 6);
-  g.lineTo(nx + 2, ny + 3);
-  g.stroke();
-
-  // mouth
-  const [mx, my] = faceMap(0, -0.56);
-  g.strokeStyle = '#8f3f42';
-  g.lineWidth = 4;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(mx - S * 0.055, my - 2);
-  g.quadraticCurveTo(mx, my + S * 0.03, mx + S * 0.055, my - 2);
-  g.stroke();
-
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
-}
-
-// ---------------------------------------------------------------------------
-// Hair
-// ---------------------------------------------------------------------------
-function buildHair(cfg, R) {
-  const rand = mulberry32(cfg.id.length * 977 + 13);
-  const H = cfg.hair;
-  const C0 = V3(0, 0, 0);
-  const front = [];
-  const back = [];
-  const tail = [];
-  let tailAnchors = [];
-
-  // cap
-  const cap = new THREE.SphereGeometry(R * 1.075, 36, 18, 0, Math.PI * 2, 0, Math.PI * 0.6);
-  cap.rotateX(-0.66);
-  cap.scale(0.97, 1.0, 1.04);
-  cap.translate(0, R * 0.04, -R * 0.03);
-  front.push(withGrad(smooth(cap), 0));
-
-  // bangs
-  const nb = H.bangs;
-  for (let i = 0; i < nb; i++) {
-    const f = (i / (nb - 1)) * 2 - 1;
-    const af = Math.abs(f);
-    const az = f * 66 + (rand() - 0.5) * 6;
-    let tipE = af > 0.82 ? -10 - rand() * 6 : 13 - (1 - af) * 6 + rand() * 4;
-    if (H.spiky) tipE += 4;
-    const root = sph(64, az * 0.55, R * 1.02);
-    const mid = sph(40, az * 0.9, R * 1.14);
-    const tip = sph(tipE, az * 1.04 + (H.spiky ? f * 6 : 0), R * (1.1 + (H.spiky ? 0.05 : 0)));
-    const m2 = mid.clone().lerp(tip, 0.6).multiplyScalar(1.03);
-    front.push(strand([root, mid, m2, tip], R * (af > 0.82 ? 0.22 : 0.3), R * 0.09, C0));
-  }
-  // side locks
-  for (const s of [-1, 1]) {
-    const len = H.style === 'short' ? 1.25 : H.style === 'medium' ? 1.9 : 2.5;
-    front.push(
-      strand(
-        [sph(42, s * 76, R * 1.03), sph(2, s * 84, R * 1.12), V3(s * R * 0.98, -R * 0.9, R * 0.28), V3(s * R * 0.86, -R * len, R * 0.4)],
-        R * 0.27,
-        R * 0.08,
-        C0
-      )
-    );
-  }
-  // ahoge
-  if (H.ahoge) {
-    front.push(
-      strand([V3(0, R * 1.02, R * 0.12), V3(0, R * 1.42, R * 0.22), V3(R * 0.05, R * 1.55, R * 0.52), V3(R * 0.1, R * 1.36, R * 0.7)], R * 0.12, R * 0.045, V3(0, R * 1.2, 0))
-    );
-  }
-  // back hair
-  const nBack = 12;
-  const L = H.length;
-  for (let i = 0; i < nBack; i++) {
-    const f = i / (nBack - 1);
-    const az = lerp(96, 264, f) + (rand() - 0.5) * 6;
-    const a = az * DEG;
-    const dx = Math.sin(a),
-      dz = Math.cos(a);
-    const len = L * (0.9 + rand() * 0.2) * (H.spiky ? 0.8 : 1);
-    const root = sph(60, az, R * 0.98);
-    const mid = sph(4, az, R * 1.16);
-    const p3 = V3(dx * R * 1.16, -R * (0.35 + len * 0.42), dz * R * 1.1 - R * 0.12);
-    const tip = V3(dx * R * (1.15 + len * 0.06) * (H.spiky ? 1.3 : 1), -R * (0.3 + len), dz * R * 1.05 - R * (0.18 + len * 0.1));
-    back.push(strand([root, mid, p3, tip], R * 0.38, R * 0.1, V3(0, -R * 0.5, 0)));
-  }
-
-  // tails
-  if (H.tail === 'pony') {
-    const A = V3(0, R * 0.62, -R * 0.95);
-    tailAnchors.push(A);
-    for (let i = 0; i < 7; i++) {
-      const dx = (rand() - 0.5) * R * 0.5;
-      const pts = [V3(dx * 0.3, 0, 0), V3(dx * 0.6, R * 0.3, -R * 0.55), V3(dx * 1.2, -R * 1.3, -R * 1.25), V3(dx * 1.6, -R * 3.6, -R * 1.0)];
-      tail.push({ anchor: 0, g: strand(pts, R * 0.36, R * 0.13, V3(0, -R * 1.4, R * 0.4)) });
-    }
-  } else if (H.tail === 'twin') {
-    for (const s of [-1, 1]) {
-      const A = V3(s * R * 0.88, R * 0.5, -R * 0.32);
-      tailAnchors.push(A);
-      for (let i = 0; i < 5; i++) {
-        const dz = (rand() - 0.5) * R * 0.4;
-        const pts = [V3(0, 0, dz * 0.3), V3(s * R * 0.42, R * 0.1, -R * 0.18 + dz), V3(s * R * 0.75, -R * 1.4, -R * 0.35 + dz), V3(s * R * 0.62, -R * 3.5, -R * 0.2 + dz * 1.4)];
-        tail.push({ anchor: tailAnchors.length - 1, g: strand(pts, R * 0.33, R * 0.12, V3(s * -R * 0.4, -R * 1.5, 0)) });
-      }
-    }
-  }
-  // head-space position (unit radius) for the angel-ring highlight
-  const headAttr = (g, off) => {
-    const p = g.attributes.position;
-    const a = new Float32Array(p.count * 3);
-    for (let i = 0; i < p.count; i++) {
-      a[i * 3] = (p.getX(i) + off.x) / R;
-      a[i * 3 + 1] = (p.getY(i) + off.y) / R;
-      a[i * 3 + 2] = (p.getZ(i) + off.z) / R;
-    }
-    g.setAttribute('aHead', new THREE.BufferAttribute(a, 3));
-    return g;
-  };
-  return {
-    front: headAttr(mergeGeometries(front), C0),
-    back: headAttr(mergeGeometries(back), C0),
-    tails: tailAnchors.map((A, k) => ({ anchor: A, geo: headAttr(mergeGeometries(tail.filter((t) => t.anchor === k).map((t) => t.g)), A) })),
-  };
-}
+const _Y = new THREE.Vector3(0, 1, 0);
 
 function skirtGeo(rTop, rBot, len, pleats = 10, depth = 0.06, squash = 0.86, open = 0) {
   const g = new THREE.CylinderGeometry(rTop, rBot, len, pleats * 4, 5, true, open / 2, Math.PI * 2 - open);
@@ -523,6 +103,7 @@ export class CharacterModel {
       headR: opts.headR,
       ring: opts.ring,
       chain: opts.chain,
+      faceTex: opts.faceTex,
     });
   }
 
@@ -571,7 +152,7 @@ export class CharacterModel {
     const c = cfg.colors;
     const fem = cfg.female;
     const j = this.j;
-    const R = 0.118;
+    const R = 0.114;
     this.R = R;
     const sh = fem ? 1 : 1.12; // shoulder/torso width factor
 
@@ -682,44 +263,41 @@ export class CharacterModel {
     ]);
     this.add(j.neck, neck, c.skin, { outline: false });
 
-    // ---- head
-    let head = new THREE.SphereGeometry(R, 40, 28);
-    deformHead(head, R);
-    head = smooth(head);
+    // ---- head: anime skull with the face drawn on in its shader
+    const head = buildHeadGeo(R, fem);
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, R * 0.95, 0.008);
+    headGroup.position.set(0, R * 0.98, 0.006);
     j.head.add(headGroup);
     this.headGroup = headGroup;
-    this.add(headGroup, head, c.skin, { face: true, headR: R });
+    const fu = faceUniforms(cfg, fem);
+    this.faceU = fu.uniforms;
+    this.add(headGroup, head, c.skin, { face: true, headR: R, faceTex: fu.uniforms, rim: 0.3 });
+    // brows and lashes show faintly through the fringe, as in anime
+    const overlay = new THREE.Mesh(head, faceOverlayMaterial(fu.uniforms, R));
+    overlay.renderOrder = 3;
+    headGroup.add(overlay);
     // ears (mostly hidden by hair)
     for (const s of [-1, 1]) {
-      const ear = new THREE.SphereGeometry(0.022, 10, 8);
-      ear.scale(0.5, 1, 0.7);
-      this.add(headGroup, ear, c.skin, { pos: V3(s * R * 0.92, -R * 0.12, -R * 0.05) });
+      const ear = new THREE.SphereGeometry(0.02, 10, 8);
+      ear.scale(0.45, 1, 0.7);
+      this.add(headGroup, ear, c.skin, { pos: V3(s * R * 0.9, -R * 0.2, -R * 0.08), rot: V3(0, s * 0.3, 0) });
     }
-    // face decal
-    const decal = new THREE.SphereGeometry(R * 1.006, 64, 36, PHI0 * DEG, PHI_LEN * DEG, TH0 * DEG, TH_LEN * DEG);
-    deformHead(decal, R * 1.006);
-    this.faceOpen = drawFace(cfg, false);
-    this.faceClosed = drawFace(cfg, true);
-    this.faceMat = faceDecalMaterial(this.faceOpen, R * 1.006);
-    const face = new THREE.Mesh(decal, this.faceMat);
-    face.renderOrder = 1;
-    headGroup.add(face);
 
     // hair
-    const hair = buildHair(cfg, R);
-    const hairOpts = { color2: c.hairTip, spec: 0.0, ring: 0.7, rim: 0.5, shadowTint: '#a8a0d0', outlineColor: outlineColorFor(c.hair) };
+    const hair = buildHair(cfg);
+    for (const g of [hair.front, hair.back, ...hair.tails.map((t) => t.geo)]) g.scale(R, R, R);
+    fu.uniforms.uFringe.value.x = hair.fringe + 0.06;
+    const hairOpts = { color2: c.hairTip, spec: 0.0, ring: 0.75, rim: 0.5, shadowTint: '#a8a0d0', outlineColor: outlineColorFor(c.hair) };
     this.add(headGroup, hair.front, c.hair, hairOpts);
     const backPivot = new THREE.Group();
     backPivot.position.set(0, R * 0.5, -R * 0.2);
     headGroup.add(backPivot);
     hair.back.translate(0, -R * 0.5, R * 0.2);
-    const backChain = this.chain(backPivot, R * 2.6, { gain: 0.7, k: 60, d: 9, lag: 0.6, bendK: 1.0 });
+    const backChain = this.chain(backPivot, R * Math.max(2.6, cfg.hair.length * 1.1), { gain: 0.7, k: 60, d: 9, lag: 0.6, bendK: 1.0 });
     this.add(backPivot, hair.back, c.hair, { ...hairOpts, chain: backChain });
     for (const t of hair.tails) {
       const piv = new THREE.Group();
-      piv.position.copy(t.anchor);
+      piv.position.copy(t.anchor).multiplyScalar(R);
       headGroup.add(piv);
       const ch = this.chain(piv, R * 3.8, { gain: 1.1, k: 38, d: 6, lag: 0.42, bendK: 2.0, flutter: 0.25 });
       this.add(piv, t.geo, c.hair, { ...hairOpts, chain: ch });
@@ -1178,6 +756,7 @@ export class CharacterModel {
         if (r.hipsY !== undefined) hipsY = r.hipsY;
       }
     }
+    this.look(dt, P, st.look ?? (!st.override && (mode === 'idle' || (mode === 'walk' && sp < 2.5))));
 
     const a = 1 - Math.exp(-dt * blend);
     const q = this._q || (this._q = new THREE.Quaternion());
@@ -1213,15 +792,73 @@ export class CharacterModel {
     // secondary motion
     this.updateSprings(dt, st);
 
+    this.updateFace(dt, mode);
+  }
+
+  // expression: mouth shape (0 rest, 1 open smile, 2 shout, 3 hurt) for a
+  // while, optionally with the eyes squeezed shut
+  setExpr(mouth, dur = 0.5, eyesShut = false) {
+    this.expr = { mouth, t: dur, shut: eyesShut };
+  }
+
+  updateFace(dt, mode) {
+    const U = this.faceU;
     // blinking
     this.blinkT -= dt;
-    if (this.blinkT < 0) {
-      this.faceMat.uniforms.uMap.value = this.faceClosed;
-      if (this.blinkT < -0.12) {
-        this.faceMat.uniforms.uMap.value = this.faceOpen;
-        this.blinkT = 2 + Math.random() * 3.5;
+    let shut = this.blinkT < 0;
+    if (this.blinkT < -0.11) this.blinkT = 1.8 + Math.random() * 3.6;
+    let mouth = 0;
+    const e = this.expr;
+    if (e) {
+      e.t -= dt;
+      mouth = e.mouth;
+      if (e.shut) shut = true;
+      if (e.t <= 0) this.expr = null;
+    } else if (this.talking) {
+      this.talkT = (this.talkT || 0) - dt;
+      if (this.talkT <= 0) {
+        this.talkMouth = this.talkMouth ? 0 : 1;
+        this.talkT = 0.08 + Math.random() * 0.12;
       }
+      mouth = this.talkMouth;
+    } else if (mode === 'glide' || mode === 'jump') mouth = 1;
+    U.uBlink.value = shut ? 1 : 0;
+    U.uMouth.value = mouth;
+    // eyes follow the look target (the head turns in the pose, see look())
+    const L = this._lookEye || (this._lookEye = new THREE.Vector2());
+    U.uLook.value.x = damp(U.uLook.value.x, L.x, 14, dt);
+    U.uLook.value.y = damp(U.uLook.value.y, L.y, 14, dt);
+  }
+
+  // turn the head (and the eyes the rest of the way) towards lookTarget
+  look(dt, P, allowed) {
+    const T = this.lookTarget;
+    const L = this._lookEye || (this._lookEye = new THREE.Vector2());
+    let yaw = 0,
+      pitch = 0,
+      w = 0;
+    if (T && allowed) {
+      const hp = this._hp || (this._hp = new THREE.Vector3());
+      this.headGroup.getWorldPosition(hp);
+      const d = this._ld || (this._ld = new THREE.Vector3());
+      d.subVectors(T, hp);
+      // into the body's frame
+      d.applyAxisAngle(_Y, -this.root.rotation.y);
+      const horiz = Math.hypot(d.x, d.z);
+      yaw = Math.atan2(d.x, d.z);
+      pitch = Math.atan2(d.y, Math.max(horiz, 1e-3));
+      w = smoothstep(1.75, 1.2, Math.abs(yaw)) * smoothstep(0.3, 0.8, horiz) * smoothstep(40, 18, horiz);
     }
+    this.lookW = damp(this.lookW || 0, w, 4, dt);
+    const lw = this.lookW;
+    const hy = clamp(yaw, -1.0, 1.0) * 0.62 * lw;
+    const hx = -clamp(pitch, -0.6, 0.5) * 0.5 * lw;
+    P.head.y += hy * 0.65;
+    P.neck.y += hy * 0.35;
+    P.head.x += hx;
+    // the eyes take up the rest
+    L.x = clamp((yaw * lw - hy) * 0.11, -0.055, 0.055) + clamp(yaw, -1, 1) * 0.02 * lw;
+    L.y = clamp((pitch * lw + hx) * 0.07, -0.028, 0.03);
   }
 
   // Occasional idle fidgets: look around, stretch, shift weight, scuff a foot.

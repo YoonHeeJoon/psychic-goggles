@@ -26,8 +26,9 @@ export const NPC_DEFS = [
       female: false,
       scale: 1.04,
       colors: col({ skin: '#f6d6c2', hair: '#d8d4cc', hairTip: '#a8a29a', eye: '#7a6a4a', eye2: '#e8dcc0', outfit: '#5b4636', outfit2: '#c9a35a', legs: '#3a3028' }),
-      hair: { style: 'short', length: 1.3, bangs: 7, ahoge: false, spiky: false, tail: null },
+      hair: { style: 'short', length: 1.3, bangs: 7, ahoge: false, spiky: false, tail: null, part: 'side' },
       outfit: { skirt: 'coat', cape: true, sleeves: 'long', coat: true },
+      face: { eye: 'elder' },
     },
     route: [at(-20, 3.2), at(30, 3.4), at(-60, 3.0)],
     speed: 0.85,
@@ -299,6 +300,9 @@ export class NPCs {
       const m = n.model;
       m.root.position.copy(n.pos);
       m.root.rotation.y = n.yaw;
+      // look at the player's face when close; mouth moves while talking
+      m.lookTarget = near ? (n.eye || (n.eye = new THREE.Vector3())).set(P.x, P.y + g.player.height * 0.92, P.z) : null;
+      m.talking = n.talking && !!(g.dialogue && g.dialogue.typing);
       m.update(dt, { mode: speed > 0.1 ? 'run' : 'idle', speed, localVel: _lv.set(0, 0, speed) });
 
       // name tag + chatter bubble

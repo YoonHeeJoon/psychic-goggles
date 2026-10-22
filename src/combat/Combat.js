@@ -296,6 +296,10 @@ export class Combat {
     P.animOverride = (pose, model) => this.poseOverride(pose, model);
     P.bowAim = this.action.pose === 'bowShot';
     this.weaponT = 3;
+    // a shout on skills and bursts, a short breath on some swings
+    const k = this.action.kind;
+    if (k === 'skill' || k === 'burst') P.model.setExpr(2, k === 'burst' ? 0.9 : 0.5);
+    else if (k === 'attack' && Math.random() < 0.4) P.model.setExpr(Math.random() < 0.5 ? 2 : 3, 0.3);
   }
 
   endAction() {
@@ -790,6 +794,7 @@ export class Combat {
     }
     const c = P.current;
     dmg = Math.round(dmg * (0.9 + Math.random() * 0.2) * (c.defMul || 1));
+    P.model.setExpr(3, 0.55, true);
     if (this.shields.cur) {
       dmg = Math.round(this.shields.absorb(dmg));
       if (dmg <= 0) {

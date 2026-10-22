@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shared, VERT_HEAD, FRAG_HEAD, FRAG_TAIL, litUniforms, CLOUD_GLSL } from './shaders.js';
+import { FACE_TEX_GLSL } from '../character/Face.js';
 
 // ---------------------------------------------------------------------------
 // Face lighting: instead of N.L (which gives blotchy shadows on a small head)
@@ -135,12 +136,19 @@ varying vec2 vUv;
 #endif
 ${FACE_GLSL}
 ${CLOUD_GLSL}
+#ifdef FACETEX
+${FACE_TEX_GLSL}
+#endif
 void main(){
   vec3 N = normalize(vNormalW);
   if (!gl_FrontFacing) N = -N;
   vec3 V = normalize(cameraPosition - vWorldPos);
   vec3 albedo = mix(uColor, uColor2, smoothstep(0.3, 1.0, vGrad) * uGradAmt);
   if (uUseMap > 0.5) albedo *= texture2D(uMap, vUv).rgb;
+  #ifdef FACETEX
+    float featK, hairSh;
+    albedo = faceComposite(albedo, featK, hairSh);
+  #endif
   float ndl = dot(N, uSunDir);
   float shadow = getShadowMask() * cloudShadow(vWorldPos, uSunDir);
   float lit = smoothstep(uRampOffset - 0.04, uRampOffset + 0.06, ndl);
@@ -148,9 +156,19 @@ void main(){
     float fw = smoothstep(0.05, 0.45, vHead.z / max(length(vHead), 1e-3));
     lit = mix(lit, faceLit(vHead, normalize(vHF), normalize(vHR), uSunDir), fw);
   #endif
+  #ifdef FACETEX
+    lit *= 1.0 - hairSh;
+  #endif
   lit *= mix(1.0, shadow, 0.9);
+  #ifdef FACETEX
+    lit = mix(lit, 1.0, featK * 0.45);
+  #endif
   vec3 litCol = albedo * uCharLit;
   vec3 shdCol = albedo * uShadowTint * uCharShade;
+  #ifdef FACETEX
+    // faces keep a light, warm shadow
+    shdCol = mix(shdCol, litCol * vec3(0.96, 0.86, 0.86), 0.45);
+  #endif
   vec3 col = mix(shdCol, litCol, lit);
   float fr = 1.0 - max(dot(N, V), 0.0);
   float rim = smoothstep(0.62, 0.78, fr) * (0.25 + 0.75 * lit);
@@ -175,6 +193,10 @@ void main(){
     ring *= 0.35 + 0.65 * lit;
     vec3 ringCol = mix(albedo * 1.8, vec3(1.0), 0.4) * uCharLit;
     col = mix(col, ringCol, clamp(ring * uRing, 0.0, 1.0));
+    // painted strand lines along each lock, darker towards the roots
+    float strandL = smoothstep(0.6, 0.98, abs(sin(vUv.x * 12.566 + vGrad * 1.7)));
+    col *= 1.0 - strandL * 0.1 * step(0.001, vUv.x + vUv.y);
+    col *= mix(0.9, 1.0, smoothstep(0.0, 0.35, vGrad + step(vUv.x + vUv.y, 0.0)));
   #endif
   col += albedo * uEmissive;
   col = mix(col, vec3(1.0, 0.95, 0.9), uFlash);
@@ -188,7 +210,7 @@ const toonCache = new Map();
 
 export function toonMaterial(opts = {}) {
   const chain = opts.chain;
-  const unique = opts.unique || !!chain;
+  const unique = opts.unique || !!chain || !!opts.faceTex;
   const key = unique ? '' : JSON.stringify(opts, (k, v) => (v && v.isTexture ? v.uuid : v));
   if (!unique && toonCache.has(key)) return toonCache.get(key);
   const c = new THREE.Color(opts.color ?? '#ffffff');
@@ -219,6 +241,10 @@ export function toonMaterial(opts = {}) {
   });
   const defines = {};
   if (opts.face) defines.FACE = '';
+  if (opts.faceTex) {
+    defines.FACETEX = '';
+    Object.assign(uniforms, opts.faceTex);
+  }
   if (opts.ring) defines.HAIR = '';
   if (chain) {
     defines.CHAIN = '';
@@ -321,70 +347,92 @@ export function outlineColorFor(hex) {
 }
 
 // ---------------------------------------------------------------------------
-// Face decal: unlit-ish texture tinted by character lighting.
+// Face overlay: brows and lash lines drawn faintly over the fringe (anime
+// hair is see-through over the eyebrows). The mesh is pulled a few cm towards
+// the camera so it clears the bangs but stays behind anything further in
+// front, and fades out unless the face is turned towards the camera.
 // ---------------------------------------------------------------------------
-export function faceDecalMaterial(texture, headR = 1) {
+export function faceOverlayMaterial(faceU, headR = 1) {
   return new THREE.ShaderMaterial({
     vertexShader: /* glsl */ `
-      ${VERT_HEAD}
+      #include <common>
+      #include <fog_pars_vertex>
       uniform float uHeadR;
-      uniform vec3 uSunDir;
-      varying vec2 vUv;
+      uniform float uPush;
       varying vec3 vHead;
       varying vec3 vHF;
       varying vec3 vHR;
+      varying vec3 vV;
       void main(){
-        vUv = uv;
         vHead = position / uHeadR;
         vHF = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
         vHR = normalize(mat3(modelMatrix) * vec3(1.0, 0.0, 0.0));
-        vec3 transformedNormal = normalMatrix * normal;
-        vec4 worldPosition = vec4((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz + uSunDir * 0.32, 1.0);
-        #include <shadowmap_vertex>
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vV = normalize(cameraPosition - wp.xyz);
+        vec4 mvPosition = viewMatrix * wp;
+        mvPosition.xyz += normalize(-mvPosition.xyz) * uPush;
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }`,
     fragmentShader: /* glsl */ `
-      ${FRAG_HEAD}
-      uniform sampler2D uMap;
+      #include <common>
+      #include <fog_pars_fragment>
+      uniform sampler2D uFaceMask;
+      uniform sampler2D uFaceClosed;
+      uniform vec4 uFaceWin;
+      uniform float uBlink;
+      uniform vec3 uInkCol;
+      uniform vec3 uBrowCol;
       uniform vec3 uCharLit;
       uniform vec3 uCharShade;
       uniform vec3 uSunDir;
-      varying vec2 vUv;
+      uniform vec4 uEye;
       varying vec3 vHead;
       varying vec3 vHF;
       varying vec3 vHR;
+      varying vec3 vV;
       ${FACE_GLSL}
       void main(){
-        vec4 t = texture2D(uMap, vUv);
-        if (t.a < 0.03) discard;
+        float front = smoothstep(0.12, 0.4, vHead.z) * smoothstep(0.2, 0.5, dot(normalize(vV), normalize(vHF)));
+        vec2 fuv = (vHead.xy - uFaceWin.xy) * uFaceWin.zw;
+        vec4 m = texture2D(uFaceMask, fuv);
+        m.r = mix(m.r, texture2D(uFaceClosed, fuv).r, uBlink);
+        // only the brows and the upper lash line
+        float lashZone = smoothstep(-0.12, -0.02, vHead.y - uEye.y);
+        float ink = m.r * lashZone;
+        float a = max(m.g * 0.55, ink * 0.5) * front;
+        if (a < 0.02) discard;
+        vec3 col = mix(uInkCol, uBrowCol, m.g / max(m.g + ink, 1e-3));
         float lit = faceLit(vHead, normalize(vHF), normalize(vHR), uSunDir);
-        lit *= mix(1.0, getShadowMask(), 0.9);
-        vec3 col = t.rgb * mix(uCharShade, uCharLit, mix(0.72, 1.0, lit));
-        gl_FragColor = vec4(col, t.a);
-        ${FRAG_TAIL}
+        col *= mix(uCharShade, uCharLit, mix(0.55, 1.0, lit));
+        gl_FragColor = vec4(col, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
       }`,
-    uniforms: Object.assign(litUniforms(), {
-      uMap: { value: texture },
+    uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
+      uFaceMask: faceU.uFaceMask,
+      uFaceClosed: faceU.uFaceClosed,
+      uFaceWin: faceU.uFaceWin,
+      uBlink: faceU.uBlink,
+      uInkCol: faceU.uInkCol,
+      uBrowCol: faceU.uBrowCol,
+      uEye: faceU.uEye,
       uCharLit: shared.uCharLit,
       uCharShade: shared.uCharShade,
       uSunDir: shared.uSunDir,
       uHeadR: { value: headR },
+      uPush: { value: 0.032 },
     }),
-    lights: true,
     transparent: true,
     depthWrite: false,
-    // keep the head's alpha marker underneath
+    fog: true,
+    // keep the alpha marker underneath (characters are tagged for the AO pass)
     blending: THREE.CustomBlending,
     blendSrc: THREE.SrcAlphaFactor,
     blendDst: THREE.OneMinusSrcAlphaFactor,
     blendSrcAlpha: THREE.ZeroFactor,
     blendDstAlpha: THREE.OneFactor,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
-    fog: true,
   });
 }
 
