@@ -615,6 +615,7 @@ export const WAYPOINTS = [
   { id: 'village', name: '풍차 마을', x: -168, z: 170 },
   { id: 'ruins', name: '잊힌 유적', x: -244, z: -84 },
   { id: 'snow', name: '설산 기슭', x: 56, z: -86 },
+  { id: 'summit', name: '설산 정상 결전지', x: 76, z: -268 },
   { id: 'arena', name: '뇌광의 결전장', x: 334, z: -38 },
   { id: 'gate', name: '바람 그림자 회랑 입구', x: -68, z: -78 },
   { id: 'bridge', name: '바람다리', x: BRIDGE.ax - 17, z: BRIDGE.az + 5 },

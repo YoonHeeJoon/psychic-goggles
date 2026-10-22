@@ -21,6 +21,8 @@ export const SPAWN = { x: -30, z: 70 };
 export const LANDMARKS = {
   lake: { x: 125, z: 105, r: 62 },
   mountain: { x: 30, z: -300 },
+  // frozen ledge east of the summit where the frost giant sleeps
+  summit: { x: 52, z: -296, r: 21, h: 166 },
   giantTree: { x: -150, z: -40 },
   statue: { x: 40, z: -10 },
   village: { x: -185, z: 185, r: 46, h: 19 },
@@ -241,6 +243,8 @@ export class Terrain {
     // boss arena on the eastern cliffs, domain gate clearing
     const ad = Math.hypot(x - LANDMARKS.arena.x, z - LANDMARKS.arena.z);
     h = lerp(h, LANDMARKS.arena.h, smoothstep(LANDMARKS.arena.r + 22, LANDMARKS.arena.r, ad));
+    const smd = Math.hypot(x - LANDMARKS.summit.x, z - LANDMARKS.summit.z);
+    h = lerp(h, LANDMARKS.summit.h + N.fbm(x * 0.05, z * 0.05, 2) * 0.25, smoothstep(LANDMARKS.summit.r + 18, LANDMARKS.summit.r, smd));
     const dd = Math.hypot(x - LANDMARKS.domain.x, z - LANDMARKS.domain.z);
     h = lerp(h, LANDMARKS.domain.h, smoothstep(LANDMARKS.domain.r + 14, LANDMARKS.domain.r, dd));
 

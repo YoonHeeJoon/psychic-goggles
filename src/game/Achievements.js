@@ -1,5 +1,6 @@
 import { elementIcon } from '../ui/icons.js';
 import { WEAPONS } from './Gear.js';
+import { WAYPOINTS } from '../world/Structures.js';
 
 // Achievements ("모험 기록"): progress is derived from saved progress plus a
 // few counters, checked once a second. Each unlock pops a banner and gives
@@ -12,7 +13,7 @@ const LIST = [
   { id: 'chest10', name: '보물 사냥꾼', desc: '보물상자 10개 열기', goal: 10, stat: 'chests' },
   { id: 'eye10', name: '바람을 모으는 자', desc: '별바람의 눈 10개 모으기', goal: 10, stat: 'eyes' },
   { id: 'eyeAll', name: '바람의 친구', desc: '별바람의 눈을 모두 모으기', goal: 31, stat: 'eyes' },
-  { id: 'wpAll', name: '섬의 지도', desc: '순간이동 포인트를 모두 활성화하기', goal: 12, stat: 'wp' },
+  { id: 'wpAll', name: '섬의 지도', desc: '순간이동 포인트를 모두 활성화하기', goal: WAYPOINTS.length, stat: 'wp' },
   { id: 'react', name: '원소 연구자', desc: '서로 다른 원소 반응 6종 일으키기', goal: 6, stat: 'reactions' },
   { id: 'gather30', name: '채집가', desc: '재료를 30번 채집하기', goal: 30, stat: 'gathered' },
   { id: 'cook5', name: '요리 입문', desc: '요리 솥에서 요리 5번 하기', goal: 5, stat: 'cooked' },

@@ -111,7 +111,7 @@ void main(){
   gl_FragColor = vec4(uColor * a, a);
 }`;
 
-function fxMat(color, mode) {
+export function fxMat(color, mode) {
   return new THREE.ShaderMaterial({
     vertexShader: FX_VERT,
     fragmentShader: FX_FRAG,
@@ -135,6 +135,26 @@ function shardGeometry() {
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.translate(0, 0.45, 0);
   return out;
+}
+
+// the faceted crystal look (also used by the frost giant's ice)
+export function crystalMaterial(a, b, glow = 0.4) {
+  return new THREE.ShaderMaterial({
+    vertexShader: CRYSTAL_VERT,
+    fragmentShader: CRYSTAL_FRAG,
+    uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
+      uA: { value: new THREE.Color(a) },
+      uB: { value: new THREE.Color(b) },
+      uGlow: { value: glow },
+      uFlash: { value: 0 },
+      uDim: { value: 1 },
+      uTime: shared.uTime,
+      uSunDir: shared.uSunDir,
+      uSunColor: shared.uSunColor,
+      uSkyAmb: shared.uSkyAmb,
+    }),
+    fog: true,
+  });
 }
 
 export class Boss {
